@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/MunifTanjim/stremthru/internal/cache"
 	"github.com/MunifTanjim/stremthru/internal/shared"
 	usenet_server "github.com/MunifTanjim/stremthru/internal/usenet/server"
 	usenet_stats "github.com/MunifTanjim/stremthru/internal/usenet/stats"
@@ -23,13 +24,23 @@ func parseRangeSince(r *http.Request) (since time.Time, interval string) {
 	}
 }
 
-func getUsenetServerNames() map[string]string {
-	names := map[string]string{}
-	if servers, err := usenet_server.GetAll(); err == nil {
+var cachedUsenetServerNames = cache.NewCachedValue(cache.CachedValueConfig[map[string]string]{
+	TTL: 60 * time.Second,
+	Get: func() (map[string]string, error) {
+		names := map[string]string{}
+		servers, err := usenet_server.GetAll()
+		if err != nil {
+			return names, err
+		}
 		for _, s := range servers {
 			names[s.Id] = s.Name
 		}
-	}
+		return names, nil
+	},
+})
+
+func getUsenetServerNames() map[string]string {
+	names, _ := cachedUsenetServerNames.Get()
 	return names
 }
 

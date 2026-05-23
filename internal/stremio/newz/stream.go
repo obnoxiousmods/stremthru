@@ -116,7 +116,7 @@ func GetStreamsFromIndexers(reqCtx context.Context, ctx *Ctx, stremType, stremId
 	for i := range sQueries {
 		go func(sq indexerSearchQuery) {
 			sq.Query.Set("extended", "1")
-			items, err := newznabcache.Search.Do(sq.indexer, sq.Query, sq.Header, log)
+			items, err := newznabcache.Search.Do(0, sq.indexer, sq.Query, sq.Header, log)
 			resultCh <- searchResult{indexer: sq.indexer, items: items, err: err, is_exact: sq.IsExact}
 		}(sQueries[i])
 	}

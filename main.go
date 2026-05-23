@@ -14,6 +14,7 @@ import (
 	"github.com/MunifTanjim/stremthru/internal/db"
 	"github.com/MunifTanjim/stremthru/internal/endpoint"
 	"github.com/MunifTanjim/stremthru/internal/job"
+	newznab_stats "github.com/MunifTanjim/stremthru/internal/newznab/stats"
 	"github.com/MunifTanjim/stremthru/internal/posthog"
 	"github.com/MunifTanjim/stremthru/internal/shared"
 	usenetmanager "github.com/MunifTanjim/stremthru/internal/usenet/manager"
@@ -37,6 +38,9 @@ func main() {
 
 	defer cache.ClosePersistentCaches()
 	defer usenetmanager.Close()
+
+	newznab_stats.InitBackgroundJob()
+	defer newznab_stats.CleanupBackgroundJob()
 
 	stopWorkers := worker.InitWorkers()
 	defer stopWorkers()

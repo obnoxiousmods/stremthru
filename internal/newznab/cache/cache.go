@@ -9,13 +9,14 @@ import (
 	"github.com/MunifTanjim/stremthru/internal/config"
 	"github.com/MunifTanjim/stremthru/internal/logger"
 	newznab_client "github.com/MunifTanjim/stremthru/internal/newznab/client"
+	newznab_stats "github.com/MunifTanjim/stremthru/internal/newznab/stats"
 )
 
 type cachedSearcher struct {
 	cache cache.Cache[[]newznab_client.Newz]
 }
 
-func (cs *cachedSearcher) Do(idxr newznab_client.Indexer, query url.Values, headers http.Header, log *logger.Logger) ([]newznab_client.Newz, error) {
+func (cs *cachedSearcher) Do(indexerId int64, idxr newznab_client.Indexer, query url.Values, headers http.Header, log *logger.Logger) ([]newznab_client.Newz, error) {
 	apiKey := query.Get("apikey")
 	query.Del("apikey")
 	encQuery := query.Encode()
@@ -43,18 +44,22 @@ func (cs *cachedSearcher) Do(idxr newznab_client.Indexer, query url.Values, head
 		}
 	} else {
 		start := time.Now()
-		items, err = idxr.Search(query, headers)
+		var bytes int64
+		items, bytes, err = idxr.Search(query, headers)
+		latency := time.Since(start)
 		if err == nil {
 			if log != nil {
-				log.Debug("indexer search completed", "indexer", idxr.GetId(), "query", encQuery, "duration", time.Since(start).String(), "count", len(items))
+				log.Debug("indexer search completed", "indexer", idxr.GetId(), "query", encQuery, "duration", latency.String(), "count", len(items))
 			}
 			if cacheKey != "" {
 				cs.cache.Add(cacheKey, items)
 			}
+			newznab_stats.RecordSearch(indexerId, latency, len(items), bytes, nil)
 		} else {
 			if log != nil {
-				log.Error("indexer search failed", "error", err, "indexer", idxr.GetId(), "query", encQuery, "duration", time.Since(start).String())
+				log.Error("indexer search failed", "error", err, "indexer", idxr.GetId(), "query", encQuery, "duration", latency.String())
 			}
+			newznab_stats.RecordSearch(indexerId, latency, 0, bytes, err)
 		}
 	}
 

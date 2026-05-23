@@ -10,6 +10,7 @@ import (
 
 	"github.com/MunifTanjim/stremthru/internal/db"
 	"github.com/MunifTanjim/stremthru/internal/logger"
+	"github.com/MunifTanjim/stremthru/internal/util"
 	"github.com/rs/xid"
 )
 
@@ -111,25 +112,6 @@ func computeThroughput(wallClockBytes int64, totalWallClockMs float64, avgLatenc
 	return 0
 }
 
-// percentile returns the p-th percentile from a sorted slice using linear interpolation.
-func percentile(sorted []float64, p float64) float64 {
-	n := len(sorted)
-	if n == 0 {
-		return 0
-	}
-	if n == 1 {
-		return sorted[0]
-	}
-	rank := (p / 100) * float64(n-1)
-	lower := int(rank)
-	upper := lower + 1
-	if upper >= n {
-		return sorted[n-1]
-	}
-	frac := rank - float64(lower)
-	return sorted[lower] + frac*(sorted[upper]-sorted[lower])
-}
-
 var query_get_aggregated_stats = fmt.Sprintf(
 	`SELECT %s FROM %s WHERE %s >= ?`,
 	db.JoinColumnNames(
@@ -229,9 +211,9 @@ func GetAggregatedStats(since time.Time) ([]AggregatedServerStats, error) {
 				total += v
 			}
 			s.AvgLatencyMs = total / float64(len(acc.latencySamples))
-			s.P50LatencyMs = percentile(acc.latencySamples, 50)
-			s.P95LatencyMs = percentile(acc.latencySamples, 95)
-			s.P99LatencyMs = percentile(acc.latencySamples, 99)
+			s.P50LatencyMs = util.Percentile(acc.latencySamples, 50)
+			s.P95LatencyMs = util.Percentile(acc.latencySamples, 95)
+			s.P99LatencyMs = util.Percentile(acc.latencySamples, 99)
 		}
 		s.ThroughputBps = computeThroughput(acc.wallClockBytes, acc.totalWallClockMs, s.AvgLatencyMs, s.SegmentsFetched, s.BytesDownloaded)
 		s.NZBCount = int64(len(acc.nzbHashes))
@@ -277,26 +259,10 @@ var query_get_time_series_stats = fmt.Sprintf(
 )
 
 func GetTimeSeriesStats(since time.Time, interval string) (map[string]*ServerTimeSeries, error) {
-	var bucketExpr string
-	switch db.Dialect {
-	case db.DBDialectSQLite:
-		switch interval {
-		case "hour":
-			bucketExpr = `strftime('%Y-%m-%dT%H:00:00Z', cat, 'unixepoch')`
-		default:
-			bucketExpr = `strftime('%Y-%m-%dT00:00:00Z', cat, 'unixepoch')`
-		}
-	case db.DBDialectPostgres:
-		switch interval {
-		case "hour":
-			bucketExpr = `to_char(date_trunc('hour', cat), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`
-		default:
-			bucketExpr = `to_char(date_trunc('day', cat), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`
-		}
-	default:
-		return nil, fmt.Errorf("unsupported db dialect: %s", db.Dialect)
+	bucketExpr, err := db.TimeBucketExpr(Column.CAt, interval)
+	if err != nil {
+		return nil, err
 	}
-
 	query := fmt.Sprintf(query_get_time_series_stats, bucketExpr)
 
 	rows, err := db.Query(query, db.Timestamp{Time: since})
@@ -443,7 +409,7 @@ func initBackgroundJob() {
 	backgroundJobQuit = make(chan struct{})
 	go func() {
 		flushTicker := time.NewTicker(5 * time.Minute)
-		cleanupTicker := time.NewTicker(2 * time.Minute)
+		cleanupTicker := time.NewTicker(1 * time.Hour)
 		defer flushTicker.Stop()
 		defer cleanupTicker.Stop()
 

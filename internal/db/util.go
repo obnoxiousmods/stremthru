@@ -147,6 +147,30 @@ func ToValues[T any](values []T, format string) string {
 	return fmt.Sprintf(util.RepeatJoin(format, len(values), ","), args...)
 }
 
+// TimeBucketExpr returns a dialect-specific SQL expression that buckets a
+// unix timestamp column into ISO 8601 strings. interval must be "hour" or "day".
+func TimeBucketExpr(column, interval string) (string, error) {
+	switch Dialect {
+	case DBDialectSQLite:
+		switch interval {
+		case "hour":
+			return fmt.Sprintf(`strftime('%%Y-%%m-%%dT%%H:00:00Z', %s, 'unixepoch')`, column), nil
+		case "day":
+			return fmt.Sprintf(`strftime('%%Y-%%m-%%dT00:00:00Z', %s, 'unixepoch')`, column), nil
+		}
+	case DBDialectPostgres:
+		switch interval {
+		case "hour":
+			return fmt.Sprintf(`to_char(date_trunc('hour', %s), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`, column), nil
+		case "day":
+			return fmt.Sprintf(`to_char(date_trunc('day', %s), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`, column), nil
+		}
+	default:
+		return "", fmt.Errorf("unsupported db dialect: %s", Dialect)
+	}
+	return "", fmt.Errorf("unsupported time bucket interval: %s", interval)
+}
+
 var nonAlphaNumericRegex = regexp.MustCompile(`[^a-z0-9]`)
 var whitespacesRegex = regexp.MustCompile(`\s{2,}`)
 var fts5SymbolRegex = regexp.MustCompile(`[-+*:^]`)

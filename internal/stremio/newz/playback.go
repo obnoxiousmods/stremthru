@@ -289,7 +289,7 @@ func handleStreamFromUsenet(w http.ResponseWriter, r *http.Request, ud *UserData
 		return
 	}
 
-	cacheKey := nzb_info.HashNZBFileLink(nzbUrl)
+	cacheKey := util.HashNZBFileLink(nzbUrl)
 	fileName := r.PathValue("fileName")
 
 	result, err, _ := usenetStremGroup.Do(cacheKey, func() (any, error) {

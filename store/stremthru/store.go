@@ -148,7 +148,7 @@ func (c *StoreClient) AddNewz(params *store.AddNewzParams) (*store.AddNewzData, 
 		return nil, err
 	}
 
-	id, err := nzb_info.QueueJob(ba.Username, "", params.Link, "", 0, "")
+	id, err := nzb_info.QueueJob(ba.Username, "", params.Link, "", 0, "", 0)
 	if err != nil {
 		return nil, err
 	}

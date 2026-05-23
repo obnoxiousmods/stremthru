@@ -1,4 +1,4 @@
-package nzb_info
+package util
 
 import (
 	"testing"

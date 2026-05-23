@@ -262,6 +262,51 @@ func GetById(id int64) (*NewznabIndexer, error) {
 	return &item, nil
 }
 
+func ResolveIdByURL(rawURL string) int64 {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" {
+		return 0
+	}
+	if u.Host == config.BaseURL.Host {
+		return 0
+	}
+	matches, _ := GetByHost(u.Host)
+	if len(matches) == 0 {
+		return 0
+	}
+	return matches[0].Id
+}
+
+var query_get_by_host = fmt.Sprintf(
+	`SELECT %s FROM %s WHERE %s = ? OR %s LIKE ? OR %s = ? OR %s LIKE ?`,
+	strings.Join(columns, ", "),
+	TableName,
+	Column.URL, Column.URL, Column.URL, Column.URL,
+)
+
+func GetByHost(host string) ([]NewznabIndexer, error) {
+	httpBase := "http://" + host
+	httpsBase := "https://" + host
+	rows, err := db.Query(query_get_by_host, httpBase, httpBase+"/%", httpsBase, httpsBase+"/%")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []NewznabIndexer{}
+	for rows.Next() {
+		item := NewznabIndexer{}
+		if err := rows.Scan(&item.Id, &item.Type, &item.Name, &item.URL, &item.APIKey, &item.RateLimitConfigId, &item.Disabled, &item.CAt, &item.UAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 var query_get_by_url = fmt.Sprintf(
 	`SELECT %s FROM %s WHERE %s = ?`,
 	strings.Join(columns, ", "),

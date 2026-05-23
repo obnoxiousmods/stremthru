@@ -50,7 +50,7 @@ func handleSabnzbdAddUrl(w http.ResponseWriter, r *http.Request, user string) {
 
 	password := q.Get("password")
 
-	id, err := nzb_info.QueueJob(user, nzbName, nzbURL, category, priority, password)
+	id, err := nzb_info.QueueJob(user, nzbName, nzbURL, category, priority, password, 0)
 	if err != nil {
 		log.Error("failed to insert sabnzbd nzb queue item", "error", err)
 		shared.SendHTML(w, http.StatusInternalServerError, *bytes.NewBuffer([]byte("Internal Server Error")))

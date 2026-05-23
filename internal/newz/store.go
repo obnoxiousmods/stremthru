@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/MunifTanjim/stremthru/internal/config"
+	"github.com/MunifTanjim/stremthru/internal/newznab"
 	"github.com/MunifTanjim/stremthru/internal/server"
 	"github.com/MunifTanjim/stremthru/internal/shared"
 	storecontext "github.com/MunifTanjim/stremthru/internal/store/context"
@@ -287,7 +288,7 @@ func handleStoreNewzStreamFile(w http.ResponseWriter, r *http.Request) {
 		server.SendError(w, r, err)
 		return
 	}
-	nzbFile, err := nzb_info.FetchNZBFile(nzbInfo.URL, nzbInfo.Name, ctx.Log)
+	nzbFile, err := newznab.FetchNZBFromInfo(nzbInfo, ctx.Log)
 	if err != nil {
 		server.SendError(w, r, err)
 		return

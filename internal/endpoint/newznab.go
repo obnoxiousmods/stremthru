@@ -106,7 +106,7 @@ func handleNewznabGet(w http.ResponseWriter, r *http.Request, o string) {
 		return
 	}
 
-	link, err := newznab.StremThruIndexer.UnwrapLink(nzbId)
+	indexerId, link, err := newznab.StremThruIndexer.UnwrapLink(nzbId)
 	if err != nil {
 		sendZnabResponse(w, r, 200, znab.ErrorIncorrectParameter("invalid id"), o)
 		return
@@ -117,7 +117,7 @@ func handleNewznabGet(w http.ResponseWriter, r *http.Request, o string) {
 		return
 	}
 
-	body, headers, err := newznab.StremThruIndexer.Download(link.String())
+	body, headers, err := newznab.StremThruIndexer.Download(link.String(), indexerId)
 	if err != nil {
 		sendZnabResponse(w, r, 200, znab.ErrorNoSuchItem, o)
 		return
@@ -149,7 +149,7 @@ func handleNewznabGetNZB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash := nzb_info.HashNZBFileLink(config.BaseURL.JoinPath("/v0/newznab/getnzb", nzbId).String())
+	hash := util.HashNZBFileLink(config.BaseURL.JoinPath("/v0/newznab/getnzb", nzbId).String())
 	file := nzb_info.GetCachedNZBFile(hash)
 	if file == nil {
 		server.ErrorNotFound(r).Send(w, r)

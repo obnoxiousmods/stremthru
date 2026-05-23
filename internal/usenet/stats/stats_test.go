@@ -6,33 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestPercentile(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		sorted []float64
-		p      float64
-		want   float64
-	}{
-		{"empty", nil, 50, 0},
-		{"single", []float64{5}, 50, 5},
-		{"single_p0", []float64{5}, 0, 5},
-		{"single_p100", []float64{5}, 100, 5},
-		{"two_p0", []float64{10, 20}, 0, 10},
-		{"two_p50", []float64{10, 20}, 50, 15},
-		{"two_p100", []float64{10, 20}, 100, 20},
-		{"five_p50", []float64{1, 2, 3, 4, 5}, 50, 3},
-		{"five_p25", []float64{1, 2, 3, 4, 5}, 25, 2},
-		{"five_p75", []float64{1, 2, 3, 4, 5}, 75, 4},
-		{"five_p95", []float64{1, 2, 3, 4, 5}, 95, 4.8},
-		{"five_p99", []float64{1, 2, 3, 4, 5}, 99, 4.96},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got := percentile(tc.sorted, tc.p)
-			assert.InDelta(t, tc.want, got, 0.001)
-		})
-	}
-}
-
 func TestComputeThroughput(t *testing.T) {
 	for _, tc := range []struct {
 		name             string

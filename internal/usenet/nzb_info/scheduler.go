@@ -2,11 +2,13 @@ package nzb_info
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/MunifTanjim/stremthru/internal/db"
 	"github.com/MunifTanjim/stremthru/internal/job"
 	"github.com/MunifTanjim/stremthru/internal/logger"
+	newznab_indexer "github.com/MunifTanjim/stremthru/internal/newznab/indexer"
 	usenetmanager "github.com/MunifTanjim/stremthru/internal/usenet/manager"
 	"github.com/MunifTanjim/stremthru/internal/usenet/nzb"
 	usenet_pool "github.com/MunifTanjim/stremthru/internal/usenet/pool"
@@ -45,7 +47,7 @@ var scheduler = job.NewScheduler(&job.SchedulerConfig[JobData]{
 				return err
 			}
 
-			hash := HashNZBFileLink(data.URL)
+			hash := util.HashNZBFileLink(data.URL)
 
 			name := ""
 			if mName := nzbDoc.GetMeta("name"); isValidName(mName) {
@@ -81,6 +83,11 @@ var scheduler = job.NewScheduler(&job.SchedulerConfig[JobData]{
 				}
 			}
 
+			indexerId := data.IndexerId
+			if indexerId == 0 {
+				indexerId = newznab_indexer.ResolveIdByURL(data.URL)
+			}
+
 			info := &NZBInfo{
 				Hash:      hash,
 				Name:      name,
@@ -91,6 +98,7 @@ var scheduler = job.NewScheduler(&job.SchedulerConfig[JobData]{
 				User:      data.User,
 				Date:      db.Timestamp{Time: nzbDate},
 				Status:    string(store.NewzStatusDownloading),
+				IndexerId: sql.NullInt64{Int64: indexerId, Valid: indexerId != 0},
 			}
 
 			if err := Upsert(info); err != nil {

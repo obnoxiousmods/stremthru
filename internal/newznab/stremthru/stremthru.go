@@ -54,26 +54,26 @@ func (i *Indexer) NewSearchQuery(fn func(caps *znab.Caps) newznab_client.Functio
 	return newznab_client.NewQuery(caps).SetT(fn(caps)), nil
 }
 
-func (i *Indexer) Search(query url.Values, headers http.Header) ([]newznab_client.Newz, error) {
+func (i *Indexer) Search(query url.Values, headers http.Header) ([]newznab_client.Newz, int64, error) {
 	if !i.isValidAPIKey() {
-		return nil, fmt.Errorf("invalid credentials")
+		return nil, 0, fmt.Errorf("invalid credentials")
 	}
 
 	q, err := newznab.ParseQuery(query)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	feedItems, err := newznab.StremThruIndexer.Search(q)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	result := make([]newznab_client.Newz, 0, len(feedItems))
 	for _, item := range feedItems {
 		result = append(result, convertFeedItemToNewz(item))
 	}
-	return result, nil
+	return result, 0, nil
 }
 
 func convertFeedItemToNewz(fi newznab.FeedItem) newznab_client.Newz {

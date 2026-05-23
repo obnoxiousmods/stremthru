@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/MunifTanjim/stremthru/internal/newznab"
 	usenet_manager "github.com/MunifTanjim/stremthru/internal/usenet/manager"
 	"github.com/MunifTanjim/stremthru/internal/usenet/nzb"
 	"github.com/MunifTanjim/stremthru/internal/usenet/nzb_info"
@@ -86,7 +87,7 @@ func (f *webdavFile) init() error {
 	f.initOnce.Do(func() {
 		nzbFile := nzb_info.GetCachedNZBFile(f.nzbInfo.Hash)
 		if nzbFile == nil {
-			nzbFile, f.initErr = nzb_info.FetchNZBFile(f.nzbInfo.URL, f.nzbInfo.Name, nil)
+			nzbFile, f.initErr = newznab.FetchNZBFromInfo(f.nzbInfo, nil)
 			if f.initErr != nil {
 				return
 			}

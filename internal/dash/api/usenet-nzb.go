@@ -2,6 +2,7 @@ package dash_api
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/MunifTanjim/stremthru/internal/config"
+	"github.com/MunifTanjim/stremthru/internal/newznab"
 	usenetmanager "github.com/MunifTanjim/stremthru/internal/usenet/manager"
 	"github.com/MunifTanjim/stremthru/internal/usenet/nzb"
 	"github.com/MunifTanjim/stremthru/internal/usenet/nzb_info"
@@ -346,7 +348,7 @@ func handleUploadNZB(w http.ResponseWriter, r *http.Request) {
 		Mod:  time.Now(),
 	}
 
-	hash := nzb_info.HashNZBFileLink(nzbFile.Link)
+	hash := util.HashNZBFileLink(nzbFile.Link)
 	if err := nzb_info.CacheNZBFile(hash, nzbFile); err != nil {
 		SendError(w, r, err)
 		return
@@ -367,12 +369,13 @@ func handleUploadNZB(w http.ResponseWriter, r *http.Request) {
 		URL:       nzbFile.Link,
 		User:      ctx.Session.User,
 		Status:    "queued",
+		IndexerId: sql.NullInt64{Valid: false},
 	}); err != nil {
 		SendError(w, r, err)
 		return
 	}
 
-	queueId, err := nzb_info.QueueJob(ctx.Session.User, name, nzbFile.Link, "", 0, "")
+	queueId, err := nzb_info.QueueJob(ctx.Session.User, name, nzbFile.Link, "", 0, "", 0)
 	if err != nil {
 		SendError(w, r, err)
 		return
@@ -400,7 +403,7 @@ func handleRequeueNZB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queueId, err := nzb_info.QueueJob(info.User, info.Name, info.URL, "", 0, info.Password)
+	queueId, err := nzb_info.QueueJob(info.User, info.Name, info.URL, "", 0, info.Password, info.IndexerId.Int64)
 	if err != nil {
 		SendError(w, r, err)
 		return
@@ -428,7 +431,7 @@ func handleRequeueAllNZB(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		nzb_info.RehashIfNeeded(&info)
-		_, err := nzb_info.QueueJob(info.User, info.Name, info.URL, "", 0, info.Password)
+		_, err := nzb_info.QueueJob(info.User, info.Name, info.URL, "", 0, info.Password, info.IndexerId.Int64)
 		if err != nil {
 			continue
 		}
@@ -459,7 +462,7 @@ func handleStreamNZBFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nzbFile, err := nzb_info.FetchNZBFile(info.URL, info.Name, ctx.Log)
+	nzbFile, err := newznab.FetchNZBFromInfo(info, ctx.Log)
 	if err != nil {
 		SendError(w, r, err)
 		return

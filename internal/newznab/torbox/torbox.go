@@ -93,10 +93,10 @@ func convertNZBToNewz(nzb *torbox.UsenetSearchByIDDataNZB) newznab_client.Newz {
 	return newz
 }
 
-func (i *Indexer) Search(query url.Values, header http.Header) ([]newznab_client.Newz, error) {
+func (i *Indexer) Search(query url.Values, header http.Header) ([]newznab_client.Newz, int64, error) {
 	imdbId := query.Get(znab.SearchParamIMDBId)
 	if imdbId == "" {
-		return nil, nil
+		return nil, 0, nil
 	}
 	if !strings.HasPrefix(imdbId, "tt") {
 		imdbId = "tt" + imdbId
@@ -112,7 +112,7 @@ func (i *Indexer) Search(query url.Values, header http.Header) ([]newznab_client
 
 	resp, err := i.api.SearchUsenetByID(params)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	nzbs := resp.Data.NZBs
@@ -121,5 +121,5 @@ func (i *Indexer) Search(query url.Values, header http.Header) ([]newznab_client
 		nzb := &nzbs[idx]
 		result = append(result, convertNZBToNewz(nzb))
 	}
-	return result, nil
+	return result, 0, nil
 }

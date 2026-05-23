@@ -7,7 +7,6 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
-	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -26,8 +25,12 @@ type NZBFile struct {
 	Mod  time.Time
 }
 
-func (b NZBFile) CacheSize() int64 {
+func (b NZBFile) Size() int64 {
 	return int64(len(b.Blob))
+}
+
+func (b NZBFile) CacheSize() int64 {
+	return b.Size()
 }
 
 func (f *NZBFile) ToFileHeader() (*multipart.FileHeader, error) {
@@ -45,7 +48,7 @@ func (f *NZBFile) ToFileHeader() (*multipart.FileHeader, error) {
 	}
 
 	reader := multipart.NewReader(&buf, writer.Boundary())
-	form, err := reader.ReadForm(f.CacheSize() + 1024)
+	form, err := reader.ReadForm(f.Size() + 1024)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read form: %w", err)
 	}
@@ -82,36 +85,8 @@ var nzbFetchErrCache = cache.NewCache[string](&cache.CacheConfig{
 	Lifetime: 5 * time.Minute,
 })
 
-func HashNZBFileLink(link string) string {
-	if u, err := url.Parse(link); err == nil {
-		if strings.HasSuffix(strings.TrimSuffix(u.Path, "/"), "/api") {
-			q := u.Query()
-			t, id := q.Get("t"), q.Get("id")
-			if (t == "get" || t == "g") && id != "" {
-				for key := range q {
-					if key != "t" && key != "id" {
-						q.Del(key)
-					}
-				}
-				u.RawQuery = q.Encode()
-				return util.MD5Hash(u.String())
-			}
-		}
-	}
-	return util.MD5Hash(cleanNZBFileLink(link))
-}
-
-func cleanNZBFileLink(link string) string {
-	link, _, ok := strings.Cut(link, "?")
-	if !ok {
-		link, _, _ = strings.Cut(link, "&")
-	}
-	link, _, _ = strings.Cut(link, "#")
-	return link
-}
-
 func RehashIfNeeded(info *NZBInfo) error {
-	newHash := HashNZBFileLink(info.URL)
+	newHash := util.HashNZBFileLink(info.URL)
 	if info.Hash == newHash {
 		return nil
 	}
@@ -126,11 +101,28 @@ var nzbFileFetcher = func() *http.Client {
 	return client
 }()
 
-func fetchNZBFile(link string, name string, log *logger.Logger, onFetch func(*NZBFile)) (*NZBFile, error) {
-	clink := cleanNZBFileLink(link)
-	cacheKey := HashNZBFileLink(link)
-	var nzbFile NZBFile
-	if nzbFileCache.Get(cacheKey, &nzbFile) {
+type OnFetchedHook func(nzbFile *NZBFile, err error, latency time.Duration)
+
+type fetchOptions struct {
+	onFetched OnFetchedHook
+	indexerId int64
+}
+
+type FetchOption func(*fetchOptions)
+
+func WithOnFetched(fn OnFetchedHook) FetchOption {
+	return func(o *fetchOptions) { o.onFetched = fn }
+}
+
+func WithIndexerId(id int64) FetchOption {
+	return func(o *fetchOptions) { o.indexerId = id }
+}
+
+func fetchNZBFile(link string, name string, log *logger.Logger, opts *fetchOptions) (*NZBFile, error) {
+	clink := util.CleanNZBFileLink(link)
+	cacheKey := util.HashNZBFileLink(link)
+	nzbFile := &NZBFile{}
+	if nzbFileCache.Get(cacheKey, nzbFile) {
 		if log != nil {
 			log.Debug("fetch nzb - cache hit", "link", clink)
 		}
@@ -140,17 +132,25 @@ func fetchNZBFile(link string, name string, log *logger.Logger, onFetch func(*NZ
 		}
 		return nil, fmt.Errorf("cached failure: %s", fetchErr)
 	} else {
-
 		if log != nil {
 			log.Debug("fetch nzb - cache miss", "link", clink)
 		}
 		file, err, _ := nzbFileFetchSG.Do(cacheKey, func() (ret any, err error) {
+			startTime := time.Now()
+			var file *NZBFile
+
+			defer func() {
+				if opts.onFetched != nil {
+					opts.onFetched(file, err, time.Since(startTime))
+				}
+			}()
+
 			defer func() {
 				if err == nil {
 					return
 				}
-				if err := nzbFetchErrCache.Add(cacheKey, err.Error()); err != nil && log != nil {
-					log.Warn("fetch nzb - failed to cache failure", "error", err, "link", clink)
+				if cacheErr := nzbFetchErrCache.Add(cacheKey, err.Error()); cacheErr != nil && log != nil {
+					log.Warn("fetch nzb - failed to cache failure", "error", cacheErr, "link", clink)
 				}
 			}()
 
@@ -208,19 +208,15 @@ func fetchNZBFile(link string, name string, log *logger.Logger, onFetch func(*NZ
 			if !strings.HasSuffix(filename, ".nzb") {
 				filename += ".nzb"
 			}
-			file := NZBFile{
+			file = &NZBFile{
 				Blob: blob,
 				Name: filename,
 				Link: link,
 				Mod:  time.Now(),
 			}
-			err = nzbFileCache.Add(cacheKey, file)
-			if err != nil {
-				if log != nil {
-					log.Warn("fetch nzb - failed to cache", "error", err, "link", clink)
-				}
-			} else if onFetch != nil {
-				onFetch(&file)
+
+			if cacheErr := nzbFileCache.Add(cacheKey, *file); cacheErr != nil && log != nil {
+				log.Warn("fetch nzb - failed to cache", "error", cacheErr, "link", clink)
 			}
 			return file, nil
 		})
@@ -230,15 +226,28 @@ func fetchNZBFile(link string, name string, log *logger.Logger, onFetch func(*NZ
 			}
 			return nil, err
 		}
-		nzbFile = file.(NZBFile)
+		nzbFile = file.(*NZBFile)
 	}
-	return &nzbFile, nil
+	return nzbFile, nil
 }
 
-func FetchNZBFile(link string, name string, log *logger.Logger) (*NZBFile, error) {
-	return fetchNZBFile(link, name, log, func(n *NZBFile) {
-		QueueJob("", n.Name, n.Link, "", 0, "")
-	})
+func FetchNZBFile(link string, name string, log *logger.Logger, opts ...FetchOption) (*NZBFile, error) {
+	options := fetchOptions{}
+	for _, opt := range opts {
+		opt(&options)
+	}
+	onFetch := options.onFetched
+	indexerId := options.indexerId
+	options.onFetched = func(nzbFile *NZBFile, err error, latency time.Duration) {
+		if onFetch != nil {
+			onFetch(nzbFile, err, latency)
+		}
+		if nzbFile == nil {
+			return
+		}
+		QueueJob("", nzbFile.Name, nzbFile.Link, "", 0, "", indexerId)
+	}
+	return fetchNZBFile(link, name, log, &options)
 }
 
 func CacheNZBFile(hash string, file NZBFile) error {
@@ -246,6 +255,6 @@ func CacheNZBFile(hash string, file NZBFile) error {
 }
 
 func DeleteNZBFile(link string) {
-	cacheKey := HashNZBFileLink(link)
+	cacheKey := util.HashNZBFileLink(link)
 	nzbFileCache.Remove(cacheKey)
 }

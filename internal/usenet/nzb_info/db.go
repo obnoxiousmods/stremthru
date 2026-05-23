@@ -25,6 +25,7 @@ var Column = struct {
 	User       string
 	Date       string
 	Status     string
+	IndexerId  string
 	CAt        string
 	UAt        string
 }{
@@ -40,6 +41,7 @@ var Column = struct {
 	User:       "user",
 	Date:       "date",
 	Status:     "status",
+	IndexerId:  "indexer_id",
 	CAt:        "cat",
 	UAt:        "uat",
 }
@@ -57,6 +59,7 @@ var columns = []string{
 	Column.User,
 	Column.Date,
 	Column.Status,
+	Column.IndexerId,
 	Column.CAt,
 	Column.UAt,
 }
@@ -74,14 +77,15 @@ type NZBInfo struct {
 	User         string
 	Date         db.Timestamp
 	Status       string
+	IndexerId    sql.NullInt64
 	CAt          db.Timestamp
 	UAt          db.Timestamp
 }
 
 var query_upsert = fmt.Sprintf(
-	`INSERT INTO %s (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (%s) DO UPDATE SET %s = EXCLUDED.%s, %s = EXCLUDED.%s, %s = EXCLUDED.%s, %s = EXCLUDED.%s, %s = EXCLUDED.%s, %s = EXCLUDED.%s, %s = EXCLUDED.%s, %s = EXCLUDED.%s, %s = EXCLUDED.%s, %s = %s`,
+	`INSERT INTO %s (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (%s) DO UPDATE SET %s = EXCLUDED.%s, %s = EXCLUDED.%s, %s = EXCLUDED.%s, %s = EXCLUDED.%s, %s = EXCLUDED.%s, %s = EXCLUDED.%s, %s = EXCLUDED.%s, %s = EXCLUDED.%s, %s = EXCLUDED.%s, %s = COALESCE(EXCLUDED.%s, %s.%s), %s = %s`,
 	TableName,
-	db.JoinColumnNames(Column.Id, Column.Hash, Column.Name, Column.Size, Column.FileCount, Column.Password, Column.URL, Column.Files, Column.Streamable, Column.User, Column.Date, Column.Status),
+	db.JoinColumnNames(Column.Id, Column.Hash, Column.Name, Column.Size, Column.FileCount, Column.Password, Column.URL, Column.Files, Column.Streamable, Column.User, Column.Date, Column.Status, Column.IndexerId),
 	Column.Hash,
 	Column.Name, Column.Name,
 	Column.Size, Column.Size,
@@ -92,6 +96,7 @@ var query_upsert = fmt.Sprintf(
 	Column.Streamable, Column.Streamable,
 	Column.Date, Column.Date,
 	Column.Status, Column.Status,
+	Column.IndexerId, Column.IndexerId, TableName, Column.IndexerId,
 	Column.UAt, db.CurrentTimestamp,
 )
 
@@ -112,6 +117,7 @@ func Upsert(info *NZBInfo) error {
 		info.User,
 		info.Date,
 		info.Status,
+		info.IndexerId,
 	)
 	return err
 }
@@ -139,7 +145,7 @@ var query_get_by_id = fmt.Sprintf(
 func GetById(id string) (*NZBInfo, error) {
 	row := db.QueryRow(query_get_by_id, id)
 	info := NZBInfo{}
-	if err := row.Scan(&info.Id, &info.Hash, &info.Name, &info.Size, &info.FileCount, &info.Password, &info.URL, &info.ContentFiles, &info.Streamable, &info.User, &info.Date, &info.Status, &info.CAt, &info.UAt); err != nil {
+	if err := row.Scan(&info.Id, &info.Hash, &info.Name, &info.Size, &info.FileCount, &info.Password, &info.URL, &info.ContentFiles, &info.Streamable, &info.User, &info.Date, &info.Status, &info.IndexerId, &info.CAt, &info.UAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -158,7 +164,7 @@ var query_get_by_hash = fmt.Sprintf(
 func GetByHash(hash string) (*NZBInfo, error) {
 	row := db.QueryRow(query_get_by_hash, hash)
 	info := NZBInfo{}
-	if err := row.Scan(&info.Id, &info.Hash, &info.Name, &info.Size, &info.FileCount, &info.Password, &info.URL, &info.ContentFiles, &info.Streamable, &info.User, &info.Date, &info.Status, &info.CAt, &info.UAt); err != nil {
+	if err := row.Scan(&info.Id, &info.Hash, &info.Name, &info.Size, &info.FileCount, &info.Password, &info.URL, &info.ContentFiles, &info.Streamable, &info.User, &info.Date, &info.Status, &info.IndexerId, &info.CAt, &info.UAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -195,7 +201,7 @@ func GetByHashes(hashes []string) (map[string]*NZBInfo, error) {
 
 	for rows.Next() {
 		info := NZBInfo{}
-		if err := rows.Scan(&info.Id, &info.Hash, &info.Name, &info.Size, &info.FileCount, &info.Password, &info.URL, &info.ContentFiles, &info.Streamable, &info.User, &info.Date, &info.Status, &info.CAt, &info.UAt); err != nil {
+		if err := rows.Scan(&info.Id, &info.Hash, &info.Name, &info.Size, &info.FileCount, &info.Password, &info.URL, &info.ContentFiles, &info.Streamable, &info.User, &info.Date, &info.Status, &info.IndexerId, &info.CAt, &info.UAt); err != nil {
 			return nil, err
 		}
 		byHash[info.Hash] = &info
@@ -225,7 +231,7 @@ func GetAll() ([]NZBInfo, error) {
 	infos := []NZBInfo{}
 	for rows.Next() {
 		info := NZBInfo{}
-		if err := rows.Scan(&info.Id, &info.Hash, &info.Name, &info.Size, &info.FileCount, &info.Password, &info.URL, &info.ContentFiles, &info.Streamable, &info.User, &info.Date, &info.Status, &info.CAt, &info.UAt); err != nil {
+		if err := rows.Scan(&info.Id, &info.Hash, &info.Name, &info.Size, &info.FileCount, &info.Password, &info.URL, &info.ContentFiles, &info.Streamable, &info.User, &info.Date, &info.Status, &info.IndexerId, &info.CAt, &info.UAt); err != nil {
 			return nil, err
 		}
 		infos = append(infos, info)
@@ -248,6 +254,19 @@ var query_update_hash = fmt.Sprintf(
 
 func UpdateHash(id string, newHash string) error {
 	_, err := db.Exec(query_update_hash, newHash, id)
+	return err
+}
+
+var query_set_indexer_id = fmt.Sprintf(
+	`UPDATE %s SET %s = ?, %s = %s WHERE %s = ?`,
+	TableName,
+	Column.IndexerId,
+	Column.UAt, db.CurrentTimestamp,
+	Column.Id,
+)
+
+func SetIndexerId(id string, indexerId int64) error {
+	_, err := db.Exec(query_set_indexer_id, indexerId, id)
 	return err
 }
 
