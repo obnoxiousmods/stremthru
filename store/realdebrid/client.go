@@ -105,6 +105,10 @@ func (c APIClient) Request(method, path string, params request.Context, v Respon
 		err.InjectReq(req)
 		if res != nil {
 			err.StatusCode = res.StatusCode
+			if err.StatusCode == http.StatusTooManyRequests {
+				err.Code = core.ErrorCodeTooManyRequests
+				err.RetryAfter = res.Header.Get("Retry-After")
+			}
 		}
 		return res, err
 	}

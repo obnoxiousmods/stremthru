@@ -94,6 +94,7 @@ func SendError(w http.ResponseWriter, r *http.Request, err error) {
 		e = &core.Error{Cause: err}
 	}
 	e.Pack(r)
+	e.PrepareResponse(w)
 
 	ctx := server.GetReqCtx(r)
 	ctx.Error = err
