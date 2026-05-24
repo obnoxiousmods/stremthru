@@ -17,15 +17,27 @@ import (
 	"github.com/MunifTanjim/stremthru/internal/util"
 )
 
+var syncBitmagnetCursor = kv.NewKVStore[string](&kv.KVStoreConfig{
+	Type: "job:sync-bitmagnet:cursor",
+})
+
+var ErrSyncBitmagnetInProgress = errors.New("sync-bitmagnet is in progress")
+
+func ResetSyncBitmagnetCursor() error {
+	mutex.Lock()
+	running := running_worker.sync_bitmagnet
+	mutex.Unlock()
+	if running {
+		return ErrSyncBitmagnetInProgress
+	}
+	return syncBitmagnetCursor.Del("updated_at")
+}
+
 func InitSyncBitmagnetWorker(conf *WorkerConfig) *Worker {
 	whitelistedExtension := map[string]struct{}{
 		".vob": {},
 		".iso": {},
 	}
-
-	cursor := kv.NewKVStore[string](&kv.KVStoreConfig{
-		Type: "job:sync-bitmagnet:cursor",
-	})
 
 	conf.Executor = func(w *Worker) error {
 		log := w.Log
@@ -54,7 +66,7 @@ func InitSyncBitmagnetWorker(conf *WorkerConfig) *Worker {
 
 		last_stored_cursor_updated_at := ""
 		last_cursor_updated_at := ""
-		if err := cursor.GetValue("updated_at", &last_cursor_updated_at); err != nil {
+		if err := syncBitmagnetCursor.GetValue("updated_at", &last_cursor_updated_at); err != nil {
 			return err
 		} else if last_cursor_updated_at == "" {
 			last_cursor_updated_at = "2020-01-01T00:00:00Z"
@@ -124,7 +136,7 @@ func InitSyncBitmagnetWorker(conf *WorkerConfig) *Worker {
 			}
 
 			if last_stored_cursor_updated_at != last_cursor_updated_at {
-				if err := cursor.Set("updated_at", last_cursor_updated_at); err != nil {
+				if err := syncBitmagnetCursor.Set("updated_at", last_cursor_updated_at); err != nil {
 					return err
 				}
 				last_stored_cursor_updated_at = last_cursor_updated_at

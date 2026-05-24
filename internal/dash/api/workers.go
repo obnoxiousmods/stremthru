@@ -270,6 +270,38 @@ func handleWorkerTemporaryFiles(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func handleResetWorkerProgress(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("id")
+	if !isValidWorkerOrJobId(name) {
+		ErrorBadRequest(r).WithMessage("invalid worker id").Send(w, r)
+		return
+	}
+
+	switch name {
+	case "sync-bitmagnet":
+		if err := worker.ResetSyncBitmagnetCursor(); err != nil {
+			if errors.Is(err, worker.ErrSyncBitmagnetInProgress) {
+				ErrorLocked(r).WithMessage(err.Error()).WithCause(err).Send(w, r)
+			} else {
+				SendError(w, r, err)
+			}
+			return
+		}
+		SendData(w, r, 204, nil)
+	default:
+		ErrorBadRequest(r).WithMessage("worker does not support progress reset").Send(w, r)
+	}
+}
+
+func handleWorkerProgress(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodDelete:
+		handleResetWorkerProgress(w, r)
+	default:
+		ErrorMethodNotAllowed(r).Send(w, r)
+	}
+}
+
 func AddWorkerEndpoints(router *http.ServeMux) {
 	authed := EnsureAuthed
 
@@ -277,4 +309,5 @@ func AddWorkerEndpoints(router *http.ServeMux) {
 	router.HandleFunc("/workers/{id}/job-logs", authed(handleWorkerJobLogs))
 	router.HandleFunc("/workers/{id}/job-logs/{jobId}", authed(handleWorkerJobLog))
 	router.HandleFunc("/workers/{id}/temporary-files", authed(handleWorkerTemporaryFiles))
+	router.HandleFunc("/workers/{id}/progress", authed(handleWorkerProgress))
 }

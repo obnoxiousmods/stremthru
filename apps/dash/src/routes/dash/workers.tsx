@@ -159,6 +159,10 @@ const canPurgeTemporaryDataByWorkerId: Record<string, boolean> = {
   "sync-imdb": true,
 };
 
+const canResetProgressByWorkerId: Record<string, boolean> = {
+  "sync-bitmagnet": true,
+};
+
 function PurgeWorkerTemporaryDataButton({
   mutation,
   workerId,
@@ -243,6 +247,64 @@ function PurgeWorkerTemporaryDataButton({
   );
 }
 
+function ResetWorkerProgressButton({
+  mutation,
+  workerId,
+}: {
+  mutation: ReturnType<typeof useWorkerMutation>["resetProgress"];
+  workerId: string;
+}) {
+  if (!canResetProgressByWorkerId[workerId]) {
+    return null;
+  }
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button disabled={mutation.isPending} size="sm" variant="destructive">
+          Reset Progress
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will reset the sync progress for this worker. The next run will
+            start from scratch.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction asChild>
+            <Button
+              disabled={mutation.isPending}
+              onClick={async () => {
+                toast.promise(mutation.mutateAsync(), {
+                  error(err: APIError) {
+                    console.error(err);
+                    return {
+                      closeButton: true,
+                      message: err.message,
+                    };
+                  },
+                  loading: "Resetting Progress...",
+                  success: {
+                    closeButton: true,
+                    message: "Progress Reset!",
+                  },
+                });
+              }}
+              variant="destructive"
+            >
+              Reset
+            </Button>
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 export const Route = createFileRoute("/dash/workers")({
   component: RouteComponent,
   staticData: {
@@ -259,7 +321,7 @@ function RouteComponent() {
   );
 
   const jobLogs = useWorkerJobLogs(selectedWorkerId);
-  const { deleteJobLog, purgeJobLogs, purgeTemporaryFiles } =
+  const { deleteJobLog, purgeJobLogs, purgeTemporaryFiles, resetProgress } =
     useWorkerMutation(selectedWorkerId);
 
   const workerOptions = useMemo(() => {
@@ -344,6 +406,10 @@ function RouteComponent() {
           <div className="flex flex-row flex-wrap gap-2">
             <PurgeWorkerTemporaryDataButton
               mutation={purgeTemporaryFiles}
+              workerId={selectedWorkerId}
+            />
+            <ResetWorkerProgressButton
+              mutation={resetProgress}
               workerId={selectedWorkerId}
             />
             <AlertDialog>
