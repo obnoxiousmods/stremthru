@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/MunifTanjim/stremthru/internal/worker/worker_queue"
 	"github.com/madflojo/tasks"
 )
+
+var ErrInProgress = errors.New("worker is in progress")
 
 var mutex sync.Mutex
 var running_worker struct {

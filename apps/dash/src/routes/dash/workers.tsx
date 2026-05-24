@@ -161,6 +161,7 @@ const canPurgeTemporaryDataByWorkerId: Record<string, boolean> = {
 
 const canResetProgressByWorkerId: Record<string, boolean> = {
   "sync-bitmagnet": true,
+  "sync-dmm-hashlist": true,
 };
 
 function PurgeWorkerTemporaryDataButton({

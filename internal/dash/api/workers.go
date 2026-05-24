@@ -277,20 +277,25 @@ func handleResetWorkerProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var err error
 	switch name {
 	case "sync-bitmagnet":
-		if err := worker.ResetSyncBitmagnetCursor(); err != nil {
-			if errors.Is(err, worker.ErrSyncBitmagnetInProgress) {
-				ErrorLocked(r).WithMessage(err.Error()).WithCause(err).Send(w, r)
-			} else {
-				SendError(w, r, err)
-			}
-			return
-		}
-		SendData(w, r, 204, nil)
+		err = worker.ResetSyncBitmagnetCursor()
+	case "sync-dmm-hashlist":
+		err = worker.ResetSyncDMMHashlistProgress()
 	default:
 		ErrorBadRequest(r).WithMessage("worker does not support progress reset").Send(w, r)
+		return
 	}
+	if err != nil {
+		if errors.Is(err, worker.ErrInProgress) {
+			ErrorLocked(r).WithMessage(err.Error()).WithCause(err).Send(w, r)
+		} else {
+			SendError(w, r, err)
+		}
+		return
+	}
+	SendData(w, r, 204, nil)
 }
 
 func handleWorkerProgress(w http.ResponseWriter, r *http.Request) {

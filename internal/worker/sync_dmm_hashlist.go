@@ -33,6 +33,15 @@ type wrappedDMMHashlistItems struct {
 	Torrents []DMMHashlistItem `json:"torrents"`
 }
 
+func ResetSyncDMMHashlistProgress() error {
+	mutex.Lock()
+	defer mutex.Unlock()
+	if running_worker.sync_dmm_hashlist {
+		return ErrInProgress
+	}
+	return dmm_hashlist.DeleteAll()
+}
+
 func InitSyncDMMHashlistWorker(conf *WorkerConfig) *Worker {
 	REPO_URL := util.MustParseURL("https://github.com/debridmediamanager/hashlists.git")
 	if config.Integration.GitHub.User != "" && config.Integration.GitHub.Token != "" {

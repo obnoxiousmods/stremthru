@@ -21,14 +21,11 @@ var syncBitmagnetCursor = kv.NewKVStore[string](&kv.KVStoreConfig{
 	Type: "job:sync-bitmagnet:cursor",
 })
 
-var ErrSyncBitmagnetInProgress = errors.New("sync-bitmagnet is in progress")
-
 func ResetSyncBitmagnetCursor() error {
 	mutex.Lock()
-	running := running_worker.sync_bitmagnet
-	mutex.Unlock()
-	if running {
-		return ErrSyncBitmagnetInProgress
+	defer mutex.Unlock()
+	if running_worker.sync_bitmagnet {
+		return ErrInProgress
 	}
 	return syncBitmagnetCursor.Del("updated_at")
 }
