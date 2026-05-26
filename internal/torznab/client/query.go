@@ -134,9 +134,13 @@ func (q *Query) GetLimit() int {
 
 func (q *Query) SetLimit(value int) *Query {
 	if value <= 0 {
-		value = q.caps.Limits.Max
+		if q.caps.Limits != nil {
+			value = q.caps.Limits.Max
+		}
 	}
-	q.values.Set(SearchParamLimit, strconv.Itoa(value))
+	if value > 0 {
+		q.values.Set(SearchParamLimit, strconv.Itoa(value))
+	}
 	return q
 }
 
