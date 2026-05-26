@@ -174,6 +174,15 @@ var _ = job.NewScheduler(&job.SchedulerConfig[JobData]{
 										log.Warn("too many requests detected from bad request error, stopping indexer processing", "indexer", indexer.Name)
 										return
 									}
+									if strings.Contains(e.Description, "Jackett.Common.IndexerException") {
+										if strings.Contains(e.Description, "Error Parsing Json Response") {
+											e.Description = "error_parsing_json_response"
+										} else if strings.Contains(e.Description, "Challenge detected but FlareSolverr is not configured") {
+											e.Description = "challenge_detected_no_flaresolverr"
+										} else {
+											e.Description, _, _ = strings.Cut(e.Description, " ---> ")
+										}
+									}
 								case http.StatusTooManyRequests:
 									if e.RetryAfter > 0 {
 										if timeLeft := timeLimit - time.Since(startTime); e.RetryAfter < timeLeft {
