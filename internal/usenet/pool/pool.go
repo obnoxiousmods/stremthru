@@ -603,6 +603,12 @@ func (p *Pool) GetPoolInfo() PoolInfo {
 	p.providersMutex.RLock()
 	defer p.providersMutex.RUnlock()
 
+	for _, provider := range p.providers {
+		if provider.IsOnline() {
+			provider.PurgeStaleIdles()
+		}
+	}
+
 	info := PoolInfo{
 		Providers: make([]ProviderInfo, 0, len(p.providers)),
 	}
