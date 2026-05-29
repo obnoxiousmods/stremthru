@@ -170,7 +170,10 @@ func handleStoreTorzAdd(w http.ResponseWriter, r *http.Request) {
 			}
 			data, err = addTorz(r, ctx, m.RawLink, nil)
 		} else {
-			magnet, fileHeader, fetchErr := shared.FetchTorrentFile(payload.Link, "", log)
+			magnet, fileHeader, fetchErr := shared.FetchTorrentFile(payload.Link, &shared.FetchTorrentFileOptions{
+				SkipCache: true,
+				Log:       log,
+			})
 			if fetchErr != nil {
 				server.ErrorBadRequest(r).Append(server.Error{
 					LocationType: server.LocationTypeBody,
