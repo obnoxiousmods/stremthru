@@ -208,6 +208,7 @@ class CheckMagnetDataItem(TypedDict):
     files: list[CheckMagnetDataItemFile]
     hash: str
     magnet: str
+    name: Optional[str]
     status: StoreMagnetStatus
 
 
@@ -351,6 +352,7 @@ class CheckTorzDataItem(TypedDict):
     files: list[CheckTorzDataItemFile]
     hash: str
     magnet: str
+    name: Optional[str]
     status: StoreTorzStatus
 
 
