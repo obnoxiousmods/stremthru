@@ -65,7 +65,10 @@ func checkMagnet(r *http.Request, ctx *storecontext.Context, magnets []string, s
 	}
 	params.IsTrustedRequest, _ = peer_token.IsValid(peer_token.ExtractFromRequest(r))
 	data, err := ctx.Store.CheckMagnet(params)
-	if err == nil && data.Items == nil {
+	if err != nil {
+		return nil, err
+	}
+	if data.Items == nil {
 		data.Items = []store.CheckMagnetDataItem{}
 	}
 	basicInfoByHash := <-basicInfoByHashCh
