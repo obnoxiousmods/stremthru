@@ -255,8 +255,10 @@ func parseStoreTunnel(storeTunnel string, tunnelMap *TunnelMap) StoreTunnelConfi
 
 	contentHostnameByStore := map[string][]string{
 		"alldebrid":  {"debrid.it"},
+		"deepbrid":   {"premium-dl.deepbrid.com", "www.deepbrid.com"},
 		"debridlink": {"debrid.link"},
 		"premiumize": {"energycdn.com"},
+		"putio":      {"api.put.io", "put.io", "cdn.put.io"},
 		"realdebrid": {"download.real-debrid.com"},
 		"torbox":     {"tb-cdn.cx", "tb-cdn.earth", "tb-cdn.io", "tb-cdn.pw", "tb-cdn.st"},
 	}

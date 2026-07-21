@@ -17,10 +17,12 @@ import (
 	"github.com/MunifTanjim/stremthru/store/alldebrid"
 	"github.com/MunifTanjim/stremthru/store/debrider"
 	"github.com/MunifTanjim/stremthru/store/debridlink"
+	"github.com/MunifTanjim/stremthru/store/deepbrid"
 	"github.com/MunifTanjim/stremthru/store/easydebrid"
 	"github.com/MunifTanjim/stremthru/store/offcloud"
 	"github.com/MunifTanjim/stremthru/store/pikpak"
 	"github.com/MunifTanjim/stremthru/store/premiumize"
+	"github.com/MunifTanjim/stremthru/store/putio"
 	"github.com/MunifTanjim/stremthru/store/realdebrid"
 	"github.com/MunifTanjim/stremthru/store/stremthru"
 	"github.com/MunifTanjim/stremthru/store/torbox"
@@ -29,6 +31,14 @@ import (
 
 var adStore = alldebrid.NewStoreClient(&alldebrid.StoreClientConfig{
 	HTTPClient: config.GetHTTPClient(config.StoreTunnel.GetTypeForAPI("alldebrid")),
+	UserAgent:  config.StoreClientUserAgent,
+})
+var dbStore = deepbrid.NewStoreClient(&deepbrid.StoreClientConfig{
+	HTTPClient: config.GetHTTPClient(config.StoreTunnel.GetTypeForAPI("deepbrid")),
+	UserAgent:  config.StoreClientUserAgent,
+})
+var piStore = putio.NewStoreClient(&putio.StoreClientConfig{
+	HTTPClient: config.GetHTTPClient(config.StoreTunnel.GetTypeForAPI("putio")),
 	UserAgent:  config.StoreClientUserAgent,
 })
 var drStore = debrider.NewStoreClient(&debrider.StoreClientConfig{
@@ -69,6 +79,8 @@ func GetStore(name string) store.Store {
 	switch store.StoreName(name) {
 	case store.StoreNameAlldebrid:
 		return adStore
+	case store.StoreNameDeepBrid:
+		return dbStore
 	case store.StoreNameDebrider:
 		return drStore
 	case store.StoreNameDebridLink:
@@ -77,6 +89,8 @@ func GetStore(name string) store.Store {
 		return edStore
 	case store.StoreNameOffcloud:
 		return ocStore
+	case store.StoreNamePutIO:
+		return piStore
 	case store.StoreNamePikPak:
 		return ppStore
 	case store.StoreNamePremiumize:
@@ -96,6 +110,8 @@ func GetStoreByCode(code string) store.Store {
 	switch store.StoreCode(code) {
 	case store.StoreCodeAllDebrid:
 		return adStore
+	case store.StoreCodeDeepBrid:
+		return dbStore
 	case store.StoreCodeDebrider:
 		return drStore
 	case store.StoreCodeDebridLink:
@@ -104,6 +120,8 @@ func GetStoreByCode(code string) store.Store {
 		return edStore
 	case store.StoreCodeOffcloud:
 		return ocStore
+	case store.StoreCodePutIO:
+		return piStore
 	case store.StoreCodePikPak:
 		return ppStore
 	case store.StoreCodePremiumize:

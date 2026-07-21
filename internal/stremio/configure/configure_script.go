@@ -16,6 +16,8 @@ function onStoreNameChangeUpdateStoreTokenDescription(nameField) {
   }
   const storeFallback = {
     alldebrid: "ad",
+    deepbrid: "db",
+    putio: "pi",
     debrider: "dr",
     debridlink: "dl",
     easydebrid: "ed",
@@ -32,6 +34,8 @@ function onStoreNameChangeUpdateStoreTokenDescription(nameField) {
       "*": "…",
       "": "Use <a target='_blank' href='https://github.com/MunifTanjim/stremthru?tab=readme-ov-file#stremthru_store_auth'><code>STREMTHRU_STORE_AUTH</code></a> config",
       ad: "<a type='button' class='outline mb-0' style='font-size: 0.75rem; padding: 0.02em 0.5em;' target='_blank' href='https://alldebrid.com'>Sign Up</a>",
+      db: "<a type='button' class='outline mb-0' style='font-size: 0.75rem; padding: 0.02em 0.5em;' target='_blank' href='https://www.deepbrid.com'>Sign Up</a>",
+      pi: "<a type='button' class='outline mb-0' style='font-size: 0.75rem; padding: 0.02em 0.5em;' target='_blank' href='https://put.io'>Sign Up</a>",
       dr: "<a type='button' class='outline mb-0' style='font-size: 0.75rem; padding: 0.02em 0.5em;' target='_blank' href='https://debrider.app'>Sign Up</a>",
       dl: "<a type='button' class='outline mb-0' style='font-size: 0.75rem; padding: 0.02em 0.5em;' target='_blank' href='https://debrid-link.com/id/4v8Uc'>Sign Up</a>",
       ed: "<a type='button' class='outline mb-0' style='font-size: 0.75rem; padding: 0.02em 0.5em;' target='_blank' href='https://paradise-cloud.com/products/easydebrid'>Sign Up</a>",
@@ -51,7 +55,9 @@ function onStoreNameChangeUpdateStoreTokenDescription(nameField) {
 			"*": "API Key",
 			"": "StremThru Basic Auth Token (base64 encoded) from <a href='https://github.com/MunifTanjim/stremthru?tab=readme-ov-file#configuration' target='_blank'><code>STREMTHRU_AUTH</code></a>",
 			ad: "AllDebrid <a href='https://alldebrid.com/apikeys' target='_blank'>API Key</a>",
-			dr: "Debrider <a href='https://debrider.app/dashboard/account#:~:text=Use%20EasyDebrid-,API%20Key,-Generate%20a%20secret' target='_blank'>API Key</a>",
+			db: "DeepBrid <a href='https://www.deepbrid.com/apikey' target='_blank'>API Key</a>",
+			pi: "Put.io <a href='https://app.put.io/settings/account/oauth' target='_blank'>OAuth Token</a>",
+      dr: "Debrider <a href='https://debrider.app/dashboard/account#:~:text=Use%20EasyDebrid-,API%20Key,-Generate%20a%20secret' target='_blank'>API Key</a>",
 			dl: "DebridLink <a href='https://debrid-link.com/webapp/apikey' target='_blank'>API Key</a>",
 			ed: "EasyDebrid <a href='https://paradise-cloud.com/guides/easydebrid-api-key' target='_blank'>API Key</a>",
 			oc: "Offcloud <a href='https://offcloud.com/account' target='_blank'>API Key</a>",

@@ -14,12 +14,14 @@ type StoreName string
 
 const (
 	StoreNameAlldebrid  StoreName = "alldebrid"
+	StoreNameDeepBrid   StoreName = "deepbrid"
 	StoreNameDebrider   StoreName = "debrider"
 	StoreNameDebridLink StoreName = "debridlink"
 	StoreNameEasyDebrid StoreName = "easydebrid"
 	StoreNameOffcloud   StoreName = "offcloud"
 	StoreNamePikPak     StoreName = "pikpak"
 	StoreNamePremiumize StoreName = "premiumize"
+	StoreNamePutIO      StoreName = "putio"
 	StoreNameRealDebrid StoreName = "realdebrid"
 	StoreNameStremThru  StoreName = "stremthru"
 	StoreNameTorBox     StoreName = "torbox"
@@ -31,12 +33,14 @@ func (n StoreName) String() string {
 
 var StoreNames = []StoreName{
 	StoreNameAlldebrid,
+	StoreNameDeepBrid,
 	StoreNameDebrider,
 	StoreNameDebridLink,
 	StoreNameEasyDebrid,
 	StoreNameOffcloud,
 	StoreNamePikPak,
 	StoreNamePremiumize,
+	StoreNamePutIO,
 	StoreNameRealDebrid,
 	StoreNameTorBox,
 }
@@ -45,12 +49,14 @@ type StoreCode string
 
 const (
 	StoreCodeAllDebrid  StoreCode = "ad"
+	StoreCodeDeepBrid   StoreCode = "db"
 	StoreCodeDebrider   StoreCode = "dr"
 	StoreCodeDebridLink StoreCode = "dl"
 	StoreCodeEasyDebrid StoreCode = "ed"
 	StoreCodeOffcloud   StoreCode = "oc"
 	StoreCodePikPak     StoreCode = "pp"
 	StoreCodePremiumize StoreCode = "pm"
+	StoreCodePutIO      StoreCode = "pi"
 	StoreCodeRealDebrid StoreCode = "rd"
 	StoreCodeStremThru  StoreCode = "st"
 	StoreCodeTorBox     StoreCode = "tb"
@@ -58,12 +64,14 @@ const (
 
 var storeCodeByName = map[StoreName]StoreCode{
 	StoreNameAlldebrid:  StoreCodeAllDebrid,
+	StoreNameDeepBrid:   StoreCodeDeepBrid,
 	StoreNameDebrider:   StoreCodeDebrider,
 	StoreNameDebridLink: StoreCodeDebridLink,
 	StoreNameEasyDebrid: StoreCodeEasyDebrid,
 	StoreNameOffcloud:   StoreCodeOffcloud,
 	StoreNamePikPak:     StoreCodePikPak,
 	StoreNamePremiumize: StoreCodePremiumize,
+	StoreNamePutIO:      StoreCodePutIO,
 	StoreNameRealDebrid: StoreCodeRealDebrid,
 	StoreNameStremThru:  StoreCodeStremThru,
 	StoreNameTorBox:     StoreCodeTorBox,
@@ -71,12 +79,14 @@ var storeCodeByName = map[StoreName]StoreCode{
 
 var storeNameByCode = map[StoreCode]StoreName{
 	StoreCodeAllDebrid:  StoreNameAlldebrid,
+	StoreCodeDeepBrid:   StoreNameDeepBrid,
 	StoreCodeDebrider:   StoreNameDebrider,
 	StoreCodeDebridLink: StoreNameDebridLink,
 	StoreCodeEasyDebrid: StoreNameEasyDebrid,
 	StoreCodeOffcloud:   StoreNameOffcloud,
 	StoreCodePikPak:     StoreNamePikPak,
 	StoreCodePremiumize: StoreNamePremiumize,
+	StoreCodePutIO:      StoreNamePutIO,
 	StoreCodeRealDebrid: StoreNameRealDebrid,
 	StoreCodeStremThru:  StoreNameStremThru,
 	StoreCodeTorBox:     StoreNameTorBox,
