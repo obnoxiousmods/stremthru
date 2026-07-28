@@ -1,6 +1,7 @@
 package stremio_store
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -306,7 +307,7 @@ func getStoreContentInfo(s store.Store, storeToken string, id string, clientIp s
 			}
 			return &contentInfo{cInfo, news.GetLargestFileName()}, nil
 		default:
-			return nil, nil
+			return nil, fmt.Errorf("%s does not support usenet", s.GetName())
 		}
 	}
 
@@ -372,7 +373,7 @@ func getStoreContentInfo(s store.Store, storeToken string, id string, clientIp s
 			return &contentInfo{cInfo, ""}, nil
 
 		default:
-			return nil, nil
+			return nil, fmt.Errorf("%s does not support webdl", s.GetName())
 		}
 	}
 

@@ -6,11 +6,16 @@ import (
 	"net/http"
 )
 
+var (
+	_ StremThruError = (*LegacyError)(nil)
+)
+
 type StremThruError interface {
 	Pack(r *http.Request)
 	GetStatusCode() int
 	GetError() *LegacyError
 	Send(w http.ResponseWriter, r *http.Request)
+	PrepareResponse(w http.ResponseWriter)
 }
 
 type LegacyErrorType string
@@ -100,6 +105,7 @@ type errorResponse struct {
 
 func (e *LegacyError) Send(w http.ResponseWriter, r *http.Request) {
 	e.Pack(r)
+	e.PrepareResponse(w)
 
 	ctx := GetReqCtx(r)
 	ctx.Error = e
@@ -110,6 +116,10 @@ func (e *LegacyError) Send(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(res); err != nil {
 		ctx.Log.Error("failed to encode json", "error", PackLegacyError(err))
 	}
+}
+
+func (e *LegacyError) PrepareResponse(w http.ResponseWriter) {
+	return
 }
 
 func (e *LegacyError) InjectReq(r *http.Request) {

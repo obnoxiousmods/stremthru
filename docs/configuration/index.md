@@ -232,6 +232,8 @@ Comma-separated list of tunnel configuration in `hostname:tunnel_config` format.
 
 If `hostname` is `*` and `tunnel_config` is `false`, only explicitly enabled hostnames will be tunneled.
 
+If `hostname` is `[newz_nzb_grab]`, the configured tunnel is used as a fallback for Newznab nzb file grab requests when no per-hostname tunnel matches.
+
 **Example:**
 
 ```sh
@@ -326,3 +328,33 @@ See [Newz Configuration](./newz) for all `STREMTHRU_NEWZ_*` environment variable
 ## Torz
 
 See [Torz Configuration](./torz) for all `STREMTHRU_TORZ_*` environment variables.
+
+## WebDAV
+
+### `STREMTHRU_WEBDAV_FILE_EXT_FILTER`
+
+File extension filter for WebDAV endpoints. Controls which file types are exposed.
+
+**Format:** Comma-separated list of extensions or presets.
+
+| Value        | Description                             |
+| ------------ | --------------------------------------- |
+| `:video:`    | Preset for all video file extensions    |
+| `:subtitle:` | Preset for all subtitle file extensions |
+| `ext`        | Include specific extension              |
+| `-ext`       | Exclude specific extension from preset  |
+
+- **Default:** `:video:,:subtitle:`
+
+**Example:**
+
+```sh
+# Default: all video and subtitle files
+STREMTHRU_WEBDAV_FILE_EXT_FILTER=:video:,:subtitle:
+
+# Only video files, excluding .avi
+STREMTHRU_WEBDAV_FILE_EXT_FILTER=:video:,-avi
+
+# Only specific extensions
+STREMTHRU_WEBDAV_FILE_EXT_FILTER=mkv,mp4,srt
+```

@@ -42,6 +42,12 @@ const (
 	ErrorCodeStoreServerDown             = server.ErrorCodeStoreServerDown
 )
 
+var (
+	_ StremThruError = (*APIError)(nil)
+	_ StremThruError = (*StoreError)(nil)
+	_ StremThruError = (*UpstreamError)(nil)
+)
+
 type StremThruError = server.StremThruError
 
 type Error = server.LegacyError
@@ -79,6 +85,13 @@ func NewStoreError(msg string) *StoreError {
 
 type UpstreamError struct {
 	err
+	RetryAfter string `json:"-"`
+}
+
+func (err *UpstreamError) PrepareResponse(w http.ResponseWriter) {
+	if err.RetryAfter != "" {
+		w.Header().Set("Retry-After", err.RetryAfter)
+	}
 }
 
 func NewUpstreamError(msg string) *UpstreamError {

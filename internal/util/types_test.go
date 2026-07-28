@@ -57,6 +57,98 @@ func TestJSONTime_UnmarshalJSON(t *testing.T) {
 	}
 }
 
+func TestMapOrEmptyArray_UnmarshalJSON(t *testing.T) {
+	type item struct {
+		Name string `json:"name"`
+	}
+
+	for _, tc := range []struct {
+		name        string
+		input       string
+		expectLen   int
+		expectNil   bool
+		expectError bool
+	}{
+		{
+			name:      "empty array",
+			input:     `[]`,
+			expectLen: 0,
+		},
+		{
+			name:      "empty object",
+			input:     `{}`,
+			expectLen: 0,
+		},
+		{
+			name:      "valid object",
+			input:     `{"a":{"name":"alpha"},"b":{"name":"beta"}}`,
+			expectLen: 2,
+		},
+		{
+			name:      "null",
+			input:     `null`,
+			expectNil: true,
+		},
+		{
+			name:        "invalid json",
+			input:       `{invalid}`,
+			expectError: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var m MapOrEmptyArray[string, item]
+			err := json.Unmarshal([]byte(tc.input), &m)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			if tc.expectNil {
+				assert.Nil(t, m)
+			} else {
+				assert.NotNil(t, m)
+				assert.Len(t, m, tc.expectLen)
+			}
+		})
+	}
+}
+
+func TestStringOrInt_UnmarshalJSON(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		input       string
+		expected    int
+		expectError bool
+	}{
+		{"integer", `42`, 42, false},
+		{"negative integer", `-5`, -5, false},
+		{"zero", `0`, 0, false},
+		{"string number", `"123"`, 123, false},
+		{"string negative", `"-99"`, -99, false},
+		{"string zero", `"0"`, 0, false},
+		{"invalid string", `"not-a-number"`, 0, true},
+		{"empty string", `""`, 0, true},
+		{"null", `null`, 0, false},
+		{"array", `[]`, 0, true},
+		{"object", `{}`, 0, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var v StringOrInt
+			err := json.Unmarshal([]byte(tc.input), &v)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tc.expected, int(v))
+		})
+	}
+}
+
 func TestJSONTime_RoundTrip(t *testing.T) {
 	for _, tc := range []struct {
 		name  string

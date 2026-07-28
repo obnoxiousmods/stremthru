@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/MunifTanjim/stremthru/core"
+	"github.com/MunifTanjim/stremthru/internal/util"
 )
 
 type Rating struct {
@@ -16,11 +17,11 @@ type Rating struct {
 }
 
 type Item struct {
-	Adult       int     `json:"adult"`   // 0 / 1
-	Country     string  `json:"country"` // us
-	Description string  `json:"description,omitempty"`
-	Genres      []Genre `json:"genres,omitempty"`
-	Id          int     `json:"id"`
+	Adult       util.Booleanish `json:"adult"`   // 0 / 1
+	Country     string          `json:"country"` // us
+	Description string          `json:"description,omitempty"`
+	Genres      []Genre         `json:"genres,omitempty"`
+	Id          int             `json:"id"`
 	Ids         struct {
 		MDBList string `json:"mdblist,omitempty"`
 		IMDB    string `json:"imdb,omitempty"`

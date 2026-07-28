@@ -281,6 +281,17 @@ func (p *Pool) destroyAllIdles() {
 	}
 }
 
+func (p *Pool) PurgeStaleIdles() {
+	for _, res := range p.pool.AcquireAllIdle() {
+		if res.Value().isStale() {
+			p.Log.Trace("purging stale idle connection", "provider", p.Id())
+			res.Destroy()
+		} else {
+			res.Release()
+		}
+	}
+}
+
 func (p *Pool) Acquire(ctx context.Context) (*PooledConnection, error) {
 	maxRetries := 3 + int(p.pool.Stat().IdleResources())
 

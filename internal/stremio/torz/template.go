@@ -87,16 +87,18 @@ func (td *TemplateData) HasFieldError() bool {
 			return true
 		}
 	}
+	if td.FilterConfig.Error != "" {
+		return true
+	}
 	return false
 }
 
 func getIndexerNameOptions() []configure.ConfigOption {
 	options := []configure.ConfigOption{
-		// {
-		// 	Disabled: true,
-		// 	Value:    string(stremio_userdata.IndexerNameGeneric),
-		// 	Label:    "Generic",
-		// },
+		{
+			Value: string(stremio_userdata.IndexerNameGeneric),
+			Label: "Generic",
+		},
 		{
 			Value: string(stremio_userdata.IndexerNameJackett),
 			Label: "Jackett",
@@ -169,6 +171,10 @@ func getTemplateData(ud *UserData, w http.ResponseWriter, r *http.Request) *Temp
 			Title:       "🧪 Stream Filter",
 			Description: `Filter expression, check <a href="https://docs.stremthru.13377001.xyz/guides/stream-filter" target="_blank">documentation</a>.`,
 		},
+	}
+
+	if _, err := ud.GetFilter(); err != nil {
+		td.FilterConfig.Error = err.Error()
 	}
 
 	if cookie, err := stremio_shared.GetAdminCookieValue(w, r); err == nil && !cookie.IsExpired {

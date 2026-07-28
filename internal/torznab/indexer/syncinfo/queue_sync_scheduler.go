@@ -3,7 +3,6 @@ package torznab_indexer_syncinfo
 import (
 	"time"
 
-	"github.com/MunifTanjim/stremthru/internal/config"
 	"github.com/MunifTanjim/stremthru/internal/job"
 	tznc "github.com/MunifTanjim/stremthru/internal/torznab/client"
 	torznab_indexer "github.com/MunifTanjim/stremthru/internal/torznab/indexer"
@@ -17,7 +16,7 @@ var _ = job.NewScheduler(&job.SchedulerConfig[JobData]{
 	Title:        "Queue Torznab Indexer Sync",
 	Interval:     10 * time.Minute,
 	RunExclusive: true,
-	Disabled:     !config.Feature.HasVault(),
+	Disabled:     queue.IsDisabled(),
 	Queue:        queue,
 	ShouldSkip: func() bool {
 		return queue.IsEmpty() || !torznab_indexer.Exists()
@@ -36,7 +35,7 @@ var _ = job.NewScheduler(&job.SchedulerConfig[JobData]{
 			indexer := &indexers[i]
 
 			switch indexer.Type {
-			case torznab_indexer.IndexerTypeJackett:
+			case torznab_indexer.IndexerTypeGeneric, torznab_indexer.IndexerTypeJackett:
 				client, err := indexer.GetClient()
 				if err != nil {
 					log.Error("failed to create torznab client", "error", err, "id", indexer.Id)
@@ -62,14 +61,19 @@ var _ = job.NewScheduler(&job.SchedulerConfig[JobData]{
 			for i := range indexers {
 				indexer := &indexers[i]
 
+				if indexer.OnlyAnime && !nsid.IsAnime {
+					continue
+				}
+
 				client, ok := clientById[indexer.Id]
 				if !ok {
 					continue
 				}
 
 				queriesBySid, err := znabsearch.BuildQueriesForTorznab(client, znabsearch.QueryBuilderConfig{
-					Meta: meta,
-					NSId: nsid,
+					Meta:       meta,
+					NSId:       nsid,
+					SearchMode: string(indexer.SearchMode),
 				})
 				if err != nil {
 					log.Error("failed to build queries for indexer", "error", err, "indexer", indexer.Name, "sid", item.SId)

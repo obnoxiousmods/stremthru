@@ -56,3 +56,10 @@ func Insert(id string, entryCount int) error {
 	_, err := db.Exec(insert_query, id, entryCount)
 	return err
 }
+
+var delete_all_query = fmt.Sprintf("DELETE FROM %s", TableName)
+
+func DeleteAll() error {
+	_, err := db.Exec(delete_all_query)
+	return err
+}

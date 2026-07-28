@@ -33,11 +33,21 @@ func AddEndpoints(mux *http.ServeMux) {
 	router.HandleFunc("/stats/server", authed(dash_api.HandleGetServerStats))
 	router.HandleFunc("/stats/torznab-indexers", authed(dash_api.HandleGetTorznabIndexerStats))
 	router.HandleFunc("/stats/stores", authed(dash_api.HandleGetStoreStats))
+	router.HandleFunc("/stats/usenet-servers/history", authed(dash_api.HandleGetUsenetServerStatsHistory))
+	router.HandleFunc("/stats/usenet-servers/timeseries", authed(dash_api.HandleGetUsenetServerStatsTimeSeries))
+	router.HandleFunc("/stats/newznab-indexers/history", authed(dash_api.HandleGetNewznabIndexerStatsHistory))
+	router.HandleFunc("/stats/newznab-indexers/timeseries", authed(dash_api.HandleGetNewznabIndexerStatsTimeSeries))
+
+	router.HandleFunc("/config", authed(dash_api.HandleGetConfig))
 
 	dash_api.AddIMDBEndpoints(router)
+	dash_api.AddAniDBEndpoints(router)
 	dash_api.AddWorkerEndpoints(router)
+	dash_api.AddTorrentInfoEndpoints(router)
+	dash_api.AddTorrentReprocessEndpoint(router)
 	dash_api.AddTorznabIndexerSyncInfoEndpoints(router)
 	dash_api.AddRateLimitEndpoints(router)
+	dash_api.AddMaintenanceEndpoints(router)
 	dash_api.AddProxyEndpoints(router)
 
 	if config.Feature.HasVault() {

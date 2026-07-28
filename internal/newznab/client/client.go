@@ -16,6 +16,10 @@ import (
 	"github.com/MunifTanjim/stremthru/internal/znab"
 )
 
+var (
+	_ Indexer = (*Client)(nil)
+)
+
 type ClientConfig struct {
 	BaseURL    string
 	HTTPClient *http.Client
@@ -73,6 +77,7 @@ func NewClient(conf *ClientConfig) *Client {
 type Response[T any] struct {
 	Error *znab.Error
 	Data  T
+	Bytes int64
 }
 
 func (r Response[T]) GetError(res *http.Response) error {
@@ -83,6 +88,11 @@ func (r Response[T]) GetError(res *http.Response) error {
 }
 
 func (r *Response[T]) Unmarshal(res *http.Response, body []byte, v any) error {
+	r.Bytes = util.SafeParseInt(res.Header.Get("Content-Length"), int64(0))
+	if r.Bytes == 0 {
+		r.Bytes = int64(len(body))
+	}
+
 	contentType := res.Header.Get("Content-Type")
 	switch {
 	case strings.Contains(contentType, "application/xml") || strings.Contains(contentType, "application/rss+xml") || strings.Contains(contentType, "text/xml"):
@@ -135,7 +145,9 @@ func (c *Client) Request(method, path string, params request.Context, v request.
 			error.UpstreamCause = rerr
 		} else {
 			error.Cause = err
-			error.StatusCode = res.StatusCode
+			if res != nil {
+				error.StatusCode = res.StatusCode
+			}
 		}
 		error.InjectReq(req)
 		return res, error

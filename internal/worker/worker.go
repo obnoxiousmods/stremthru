@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/MunifTanjim/stremthru/internal/worker/worker_queue"
 	"github.com/madflojo/tasks"
 )
+
+var ErrInProgress = errors.New("worker is in progress")
 
 var mutex sync.Mutex
 var running_worker struct {
@@ -56,6 +59,7 @@ type WorkerDetail struct {
 	Id       string        `json:"id"`
 	Title    string        `json:"title"`
 	Interval time.Duration `json:"interval"`
+	Disabled bool          `json:"-"`
 }
 
 var WorkerDetailsById = map[string]*WorkerDetail{
@@ -128,6 +132,7 @@ func NewWorker(conf *WorkerConfig) *Worker {
 	} else {
 		details.Id = conf.Name
 		details.Interval = conf.Interval
+		details.Disabled = conf.Disabled
 	}
 
 	if conf.Disabled {
@@ -341,7 +346,7 @@ func InitWorkers() func() {
 	workers := []*Worker{}
 
 	if worker := InitParseTorrentWorker(&WorkerConfig{
-		Disabled:     !config.Feature.HasTorrentInfo(),
+		Disabled:     !config.Feature.HasTorz(),
 		Name:         "parse-torrent",
 		Interval:     5 * time.Minute,
 		RunExclusive: true,
@@ -827,7 +832,7 @@ func InitWorkers() func() {
 	}
 
 	if worker := InitSyncStremioTraktWorker(&WorkerConfig{
-		Disabled:          !config.Feature.HasVault() || !config.Integration.Trakt.IsEnabled(),
+		Disabled:          !config.Feature.HasSync() || !config.Integration.Trakt.IsEnabled(),
 		Name:              "sync-stremio-trakt",
 		Interval:          30 * time.Minute,
 		RunAtStartupAfter: 5 * time.Minute,
@@ -842,7 +847,7 @@ func InitWorkers() func() {
 	}
 
 	if worker := InitSyncStremioStremioWorker(&WorkerConfig{
-		Disabled:          !config.Feature.HasVault(),
+		Disabled:          !config.Feature.HasSync(),
 		Name:              "sync-stremio-stremio",
 		Interval:          30 * time.Minute,
 		RunAtStartupAfter: 5 * time.Minute,

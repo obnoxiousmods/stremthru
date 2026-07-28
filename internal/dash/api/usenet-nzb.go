@@ -1,6 +1,8 @@
 package dash_api
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +11,7 @@ import (
 	"time"
 
 	"github.com/MunifTanjim/stremthru/internal/config"
+	"github.com/MunifTanjim/stremthru/internal/newznab"
 	usenetmanager "github.com/MunifTanjim/stremthru/internal/usenet/manager"
 	"github.com/MunifTanjim/stremthru/internal/usenet/nzb"
 	"github.com/MunifTanjim/stremthru/internal/usenet/nzb_info"
@@ -133,22 +136,32 @@ type NZBContentFileResponse struct {
 	Volume     int                      `json:"volume,omitempty"`
 }
 
+type NZBInspectionMetaResponse struct {
+	DurationMs float64 `json:"duration_ms"`
+	Error      string  `json:"error,omitempty"`
+}
+
 type NZBResponse struct {
-	Id         string                   `json:"id"`
-	Hash       string                   `json:"hash"`
-	Name       string                   `json:"name"`
-	Size       int64                    `json:"size"`
-	FileCount  int                      `json:"file_count"`
-	Password   string                   `json:"password"`
-	URL        string                   `json:"url"`
-	Files      []NZBContentFileResponse `json:"files"`
-	Streamable bool                     `json:"streamable"`
-	Cached     bool                     `json:"cached"`
-	User       string                   `json:"user"`
-	Date       string                   `json:"date"`
-	Status     string                   `json:"status"`
-	CreatedAt  string                   `json:"created_at"`
-	UpdatedAt  string                   `json:"updated_at"`
+	Id             string                     `json:"id"`
+	Hash           string                     `json:"hash"`
+	Name           string                     `json:"name"`
+	Size           int64                      `json:"size"`
+	FileCount      int                        `json:"file_count"`
+	Password       string                     `json:"password"`
+	URL            string                     `json:"url"`
+	Files          []NZBContentFileResponse   `json:"files"`
+	Streamable     bool                       `json:"streamable"`
+	Cached         bool                       `json:"cached"`
+	User           string                     `json:"user"`
+	Date           string                     `json:"date"`
+	Status         string                     `json:"status"`
+	InspectionMeta *NZBInspectionMetaResponse `json:"inspection_meta,omitempty"`
+	CreatedAt      string                     `json:"created_at"`
+	UpdatedAt      string                     `json:"updated_at"`
+}
+
+type RequeueAllResponse struct {
+	Count int `json:"count"`
 }
 
 func toNZBContentFileResponse(file usenet_pool.NZBContentFile) NZBContentFileResponse {
@@ -188,7 +201,7 @@ func toNZBResponse(info *nzb_info.NZBInfo) NZBResponse {
 	if !info.Date.IsZero() {
 		date = info.Date.Format(time.RFC3339)
 	}
-	return NZBResponse{
+	resp := NZBResponse{
 		Id:         info.Id,
 		Hash:       info.Hash,
 		Name:       info.Name,
@@ -205,6 +218,13 @@ func toNZBResponse(info *nzb_info.NZBInfo) NZBResponse {
 		CreatedAt:  info.CAt.Format(time.RFC3339),
 		UpdatedAt:  info.UAt.Format(time.RFC3339),
 	}
+	if info.InspectionMeta.Data.DurationMs > 0 || info.InspectionMeta.Data.Error != "" {
+		resp.InspectionMeta = &NZBInspectionMetaResponse{
+			DurationMs: info.InspectionMeta.Data.DurationMs,
+			Error:      info.InspectionMeta.Data.Error,
+		}
+	}
+	return resp
 }
 
 func handleGetNZBs(w http.ResponseWriter, r *http.Request) {
@@ -341,7 +361,7 @@ func handleUploadNZB(w http.ResponseWriter, r *http.Request) {
 		Mod:  time.Now(),
 	}
 
-	hash := nzb_info.HashNZBFileLink(nzbFile.Link)
+	hash := util.HashNZBFileLink(nzbFile.Link)
 	if err := nzb_info.CacheNZBFile(hash, nzbFile); err != nil {
 		SendError(w, r, err)
 		return
@@ -362,12 +382,13 @@ func handleUploadNZB(w http.ResponseWriter, r *http.Request) {
 		URL:       nzbFile.Link,
 		User:      ctx.Session.User,
 		Status:    "queued",
+		IndexerId: sql.NullInt64{Valid: false},
 	}); err != nil {
 		SendError(w, r, err)
 		return
 	}
 
-	queueId, err := nzb_info.QueueJob(ctx.Session.User, name, nzbFile.Link, "", 0, "")
+	queueId, err := nzb_info.QueueJob(ctx.Session.User, name, nzbFile.Link, "", 0, "", 0)
 	if err != nil {
 		SendError(w, r, err)
 		return
@@ -395,7 +416,7 @@ func handleRequeueNZB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queueId, err := nzb_info.QueueJob(info.User, info.Name, info.URL, "", 0, info.Password)
+	queueId, err := nzb_info.QueueJob(info.User, info.Name, info.URL, "", 0, info.Password, info.IndexerId.Int64)
 	if err != nil {
 		SendError(w, r, err)
 		return
@@ -408,6 +429,29 @@ func handleRequeueNZB(w http.ResponseWriter, r *http.Request) {
 	}
 
 	SendData(w, r, 200, toNzbQueueItemResponse(queueItem))
+}
+
+func handleRequeueAllNZB(w http.ResponseWriter, r *http.Request) {
+	items, err := nzb_info.GetAll()
+	if err != nil {
+		SendError(w, r, err)
+		return
+	}
+
+	count := 0
+	for _, info := range items {
+		if info.Status == "downloading" || info.URL == "" {
+			continue
+		}
+		nzb_info.RehashIfNeeded(&info)
+		_, err := nzb_info.QueueJob(info.User, info.Name, info.URL, "", 0, info.Password, info.IndexerId.Int64)
+		if err != nil {
+			continue
+		}
+		count++
+	}
+
+	SendData(w, r, 200, RequeueAllResponse{Count: count})
 }
 
 func handleStreamNZBFile(w http.ResponseWriter, r *http.Request) {
@@ -431,7 +475,7 @@ func handleStreamNZBFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nzbFile, err := nzb_info.FetchNZBFile(info.URL, info.Name, ctx.Log)
+	nzbFile, err := newznab.FetchNZBFromInfo(info, ctx.Log)
 	if err != nil {
 		SendError(w, r, err)
 		return
@@ -457,7 +501,8 @@ func handleStreamNZBFile(w http.ResponseWriter, r *http.Request) {
 		Password:     info.Password,
 		ContentFiles: info.ContentFiles.Data,
 	}
-	stream, err := pool.StreamByContentPath(r.Context(), nzbDoc, path, streamConfig)
+	streamCtx := context.WithValue(r.Context(), usenet_pool.NZBHashContextKey, info.Hash)
+	stream, err := pool.StreamByContentPath(streamCtx, nzbDoc, path, streamConfig)
 	if err != nil {
 		SendError(w, r, err)
 		return
@@ -495,6 +540,14 @@ func AddUsenetNZBEndpoints(router *http.ServeMux) {
 		switch r.Method {
 		case http.MethodGet:
 			handleGetNZBs(w, r)
+		default:
+			ErrorMethodNotAllowed(r).Send(w, r)
+		}
+	}))
+	router.HandleFunc("/usenet/nzb/requeue-all", authed(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			handleRequeueAllNZB(w, r)
 		default:
 			ErrorMethodNotAllowed(r).Send(w, r)
 		}

@@ -2,17 +2,22 @@ package torznab_client
 
 import (
 	"errors"
-	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/MunifTanjim/stremthru/core"
 	"github.com/MunifTanjim/stremthru/internal/cache"
-	"github.com/MunifTanjim/stremthru/internal/config"
+	"github.com/MunifTanjim/stremthru/internal/logger"
+	"github.com/MunifTanjim/stremthru/internal/shared"
 	"github.com/MunifTanjim/stremthru/internal/torrent_stream"
+	"github.com/MunifTanjim/stremthru/internal/util"
+	"github.com/MunifTanjim/stremthru/internal/znab"
 	"github.com/anacrolix/torrent/metainfo"
 )
+
+var log = logger.Scoped("torznab/client")
 
 type torzFileCached struct {
 	Hash       string
@@ -28,6 +33,7 @@ var torzFileCache = cache.NewCache[torzFileCached](&cache.CacheConfig{
 })
 
 type Torz struct {
+	GUID    string
 	Indexer string
 
 	Hash  string
@@ -68,35 +74,42 @@ func (t *Torz) EnsureMagnet() error {
 		return nil
 	}
 
-	// TODO: use shared.FetchTorrentFile
-	client := config.GetHTTPClient(config.TUNNEL_TYPE_AUTO)
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		return http.ErrUseLastResponse
+	cacheKeys := []string{}
+	if t.GUID != "" {
+		cacheKeys = append(cacheKeys, util.MD5Hash(t.GUID))
 	}
-
-	resp, err := client.Get(t.SourceLink)
+	if t.Hash != "" {
+		cacheKeys = append(cacheKeys, t.Hash)
+	}
+	magnetLink, file, err := shared.FetchTorrentFile(t.SourceLink, &shared.FetchTorrentFileOptions{
+		Log:       log,
+		CacheKeys: cacheKeys,
+	})
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
 
-	if http.StatusMovedPermanently <= resp.StatusCode && resp.StatusCode <= http.StatusSeeOther {
-		if location := resp.Header.Get("Location"); strings.HasPrefix(location, "magnet:?") {
-			m, err := core.ParseMagnetLink(location)
-			if err != nil {
-				return err
-			}
-			t.Hash = m.Hash
-			t.MagnetLink = m.RawLink
-
-			cachedTorz.Hash = t.Hash
-			cachedTorz.MagnetLink = t.MagnetLink
-			torzFileCache.Add(t.SourceLink, cachedTorz)
-			return nil
+	if magnetLink != "" {
+		m, err := core.ParseMagnetLink(magnetLink)
+		if err != nil {
+			return err
 		}
+		t.Hash = m.Hash
+		t.MagnetLink = m.RawLink
+
+		cachedTorz.Hash = t.Hash
+		cachedTorz.MagnetLink = t.MagnetLink
+		torzFileCache.Add(t.SourceLink, cachedTorz)
+		return nil
 	}
 
-	mi, err := metainfo.Load(resp.Body)
+	f, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	mi, err := metainfo.Load(f)
 	if err != nil {
 		return err
 	}
@@ -132,8 +145,48 @@ func (t *Torz) EnsureMagnet() error {
 	return nil
 }
 
+func TorzFromChannelItem(o *znab.ChannelItem, attrs znab.ChannelItemAttrs) *Torz {
+	t := &Torz{}
+	t.GUID = o.GUID
+	t.Hash = strings.ToLower(attrs.Get(znab.TorznabAttrNameInfoHash))
+	t.Title = o.Title
+	if size, err := strconv.ParseInt(attrs.Get(znab.TorznabAttrNameSize), 10, 64); err == nil && size > 0 {
+		t.Size = size
+	} else if o.Size > 0 {
+		t.Size = o.Size
+	} else if o.Enclosure.Length > 0 {
+		t.Size = o.Enclosure.Length
+	}
+	t.Seeders = util.SafeParseInt(attrs.Get(znab.TorznabAttrNameSeeders), 0)
+	if leechers := util.SafeParseInt(attrs.Get(znab.TorznabAttrNameLeechers), 0); leechers > 0 {
+		t.Leechers = leechers
+	} else if peers := util.SafeParseInt(attrs.Get(znab.TorznabAttrNamePeers), 0); peers > t.Seeders {
+		t.Leechers = peers - t.Seeders
+	}
+	if minr := util.SafeParseFloat(attrs.Get(znab.TorznabAttrNameMinimumRatio), 0); minr > 0 {
+		t.Private = true
+	} else if minst := util.SafeParseFloat(attrs.Get(znab.TorznabAttrNameMinimumSeedTime), 0); minst > 0 {
+		t.Private = true
+	}
+	if magnetUrl := attrs.Get(znab.TorznabAttrNameMagnetURL); strings.HasPrefix(magnetUrl, "magnet:?") {
+		t.MagnetLink = magnetUrl
+	}
+	if strings.HasPrefix(o.Enclosure.URL, "magnet:?") {
+		t.MagnetLink = o.Enclosure.URL
+	} else if strings.HasPrefix(o.Enclosure.URL, "http") {
+		t.SourceLink = o.Enclosure.URL
+	}
+	if t.Hash == "" && t.MagnetLink != "" {
+		if m, err := core.ParseMagnetLink(t.MagnetLink); err == nil {
+			t.Hash = m.Hash
+		}
+	}
+	return t
+}
+
 type Indexer interface {
 	GetId() string
+	GetName() string
 	NewSearchQuery(fn func(caps Caps) Function) (*Query, error)
 	Search(query url.Values) ([]Torz, error)
 }

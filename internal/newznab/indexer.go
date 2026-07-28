@@ -10,11 +10,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/MunifTanjim/stremthru/internal/config"
 	newznabcache "github.com/MunifTanjim/stremthru/internal/newznab/cache"
 	newznab_client "github.com/MunifTanjim/stremthru/internal/newznab/client"
 	newznab_indexer "github.com/MunifTanjim/stremthru/internal/newznab/indexer"
+	newznab_stats "github.com/MunifTanjim/stremthru/internal/newznab/stats"
 	"github.com/MunifTanjim/stremthru/internal/usenet/nzb_info"
 	"github.com/MunifTanjim/stremthru/internal/util"
 	"github.com/MunifTanjim/stremthru/internal/znab"
@@ -23,7 +25,7 @@ import (
 type Indexer interface {
 	Info() znab.Info
 	Search(query Query) ([]FeedItem, error)
-	Download(id string) (io.ReadCloser, http.Header, error)
+	Download(link string, indexerId int64) (io.ReadCloser, http.Header, error)
 	Capabilities() znab.Caps
 }
 
@@ -66,19 +68,22 @@ func (sti stremThruIndexer) Search(q Query) ([]FeedItem, error) {
 			continue
 		}
 		wg.Add(1)
-		go func(idxr *newznab_indexer.NewznabIndexer) {
+		go func(idxr *newznab_indexer.NewznabIndexer, q Query) {
 			defer wg.Done()
 
 			rl, err := idxr.GetRateLimiter()
 			if err != nil {
+				newznab_stats.RecordSearch(idxr.Id, 0, 0, 0, err)
 				resultCh <- searchResult{indexer: idxr, err: fmt.Errorf("failed to get rate limiter: %w", err)}
 				return
 			}
 			if rl != nil {
 				if result, err := rl.Try(); err != nil {
+					newznab_stats.RecordSearch(idxr.Id, 0, 0, 0, err)
 					resultCh <- searchResult{indexer: idxr, err: fmt.Errorf("rate limiter error: %w", err)}
 					return
 				} else if !result.Allowed {
+					newznab_stats.RecordRateLimited(idxr.Id, newznab_stats.OperationSearch)
 					resultCh <- searchResult{indexer: idxr, err: errors.New("rate limit exceeded")}
 					return
 				}
@@ -86,6 +91,7 @@ func (sti stremThruIndexer) Search(q Query) ([]FeedItem, error) {
 
 			client, err := idxr.GetClient()
 			if err != nil {
+				newznab_stats.RecordSearch(idxr.Id, 0, 0, 0, err)
 				resultCh <- searchResult{indexer: idxr, err: err}
 				return
 			}
@@ -99,11 +105,23 @@ func (sti stremThruIndexer) Search(q Query) ([]FeedItem, error) {
 			default:
 				headers = config.Newz.IndexerRequestHeader.Query.Get(config.NewzIndexerRequestQueryTypeAny)
 			}
-			query := q.ToValues()
+			caps, err := client.GetCaps()
+			if err != nil {
+				newznab_stats.RecordSearch(idxr.Id, 0, 0, 0, err)
+				resultCh <- searchResult{indexer: idxr, err: fmt.Errorf("failed to get capabilities: %w", err)}
+				return
+			}
+			adjQ, err := adjustQueryForCaps(q, caps)
+			if err != nil {
+				newznab_stats.RecordSearch(idxr.Id, 0, 0, 0, err)
+				resultCh <- searchResult{indexer: idxr, err: err}
+				return
+			}
+			query := adjQ.ToValues()
 			query.Set("apikey", apikey)
-			items, err := newznabcache.Search.Do(client, query, headers, log)
+			items, err := newznabcache.Search.Do(idxr.Id, client, query, headers, log)
 			resultCh <- searchResult{indexer: idxr, items: items, err: err}
-		}(idxr)
+		}(idxr, q.Clone())
 	}
 
 	go func() {
@@ -116,10 +134,17 @@ func (sti stremThruIndexer) Search(q Query) ([]FeedItem, error) {
 		if result.err != nil {
 			continue
 		}
+		hostnames := util.NewSet[string]()
 		for _, item := range result.items {
 			feedItem := convertToFeedItem(item, result.indexer)
 			allItems = append(allItems, feedItem)
+			if u, err := url.Parse(item.DownloadLink); err == nil {
+				if h := u.Hostname(); h != "" {
+					hostnames.Add(h)
+				}
+			}
 		}
+		newznab_indexer.RecordHostnames(result.indexer.Id, hostnames)
 	}
 
 	if q.Offset >= len(allItems) {
@@ -130,6 +155,79 @@ func (sti stremThruIndexer) Search(q Query) ([]FeedItem, error) {
 	if q.Limit > 0 && q.Limit < len(allItems) {
 		allItems = allItems[:q.Limit]
 	}
+
+	return allItems, nil
+}
+
+func (sti stremThruIndexer) SearchSingle(idxr *newznab_indexer.NewznabIndexer, q Query) ([]FeedItem, error) {
+	apikey, err := idxr.GetAPIKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get api key: %w", err)
+	}
+
+	rl, err := idxr.GetRateLimiter()
+	if err != nil {
+		newznab_stats.RecordSearch(idxr.Id, 0, 0, 0, err)
+		return nil, fmt.Errorf("failed to get rate limiter: %w", err)
+	}
+	if rl != nil {
+		if result, err := rl.Try(); err != nil {
+			newznab_stats.RecordSearch(idxr.Id, 0, 0, 0, err)
+			return nil, fmt.Errorf("rate limiter error: %w", err)
+		} else if !result.Allowed {
+			newznab_stats.RecordRateLimited(idxr.Id, newznab_stats.OperationSearch)
+			return nil, errors.New("rate limit exceeded")
+		}
+	}
+
+	client, err := idxr.GetClient()
+	if err != nil {
+		newznab_stats.RecordSearch(idxr.Id, 0, 0, 0, err)
+		return nil, err
+	}
+
+	var headers http.Header
+	switch {
+	case q.HasMovies():
+		headers = config.Newz.IndexerRequestHeader.Query.Get(config.NewzIndexerRequestQueryTypeMovie)
+	case q.HasTVShows():
+		headers = config.Newz.IndexerRequestHeader.Query.Get(config.NewzIndexerRequestQueryTypeTV)
+	default:
+		headers = config.Newz.IndexerRequestHeader.Query.Get(config.NewzIndexerRequestQueryTypeAny)
+	}
+
+	caps, err := client.GetCaps()
+	if err != nil {
+		newznab_stats.RecordSearch(idxr.Id, 0, 0, 0, err)
+		return nil, fmt.Errorf("failed to get capabilities: %w", err)
+	}
+
+	adjQ, err := adjustQueryForCaps(q, caps)
+	if err != nil {
+		newznab_stats.RecordSearch(idxr.Id, 0, 0, 0, err)
+		return nil, err
+	}
+
+	query := adjQ.ToValues()
+	query.Set("apikey", apikey)
+
+	items, err := newznabcache.Search.Do(idxr.Id, client, query, headers, log)
+	if err != nil {
+		return nil, err
+	}
+
+	allItems := make([]FeedItem, 0, len(items))
+	hostnames := util.NewSet[string]()
+	for _, item := range items {
+		feedItem := convertToFeedItem(item, idxr)
+		allItems = append(allItems, feedItem)
+		if u, err := url.Parse(item.DownloadLink); err == nil {
+			if h := u.Hostname(); h != "" {
+				hostnames.Add(h)
+			}
+		}
+	}
+	newznab_indexer.RecordHostnames(idxr.Id, hostnames)
 
 	return allItems, nil
 }
@@ -188,42 +286,54 @@ func parseNZBId(nzbId string) (indexerId int64, downloadURL string, err error) {
 	return indexerId, downloadURL, nil
 }
 
-func (sti stremThruIndexer) UnwrapLink(id string) (*url.URL, error) {
+func (sti stremThruIndexer) UnwrapLink(id string, checkRateLimit bool) (int64, *url.URL, error) {
 	indexerId, link, err := parseNZBId(id)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 
 	indexer, err := newznab_indexer.GetById(indexerId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get indexer: %w", err)
+		return indexerId, nil, fmt.Errorf("failed to get indexer: %w", err)
 	}
 	if indexer == nil {
-		return nil, errors.New("indexer not found")
+		return indexerId, nil, errors.New("indexer not found")
 	}
 
-	rl, err := indexer.GetRateLimiter()
-	if err != nil {
-		return nil, err
-	}
-	if rl != nil {
-		if result, err := rl.Try(); err != nil {
-			return nil, err
-		} else if !result.Allowed {
-			return nil, errors.New("rate limit exceeded")
+	if checkRateLimit {
+		rl, err := indexer.GetRateLimiter()
+		if err != nil {
+			return indexerId, nil, err
+		}
+		if rl != nil {
+			if result, err := rl.Try(); err != nil {
+				return indexerId, nil, err
+			} else if !result.Allowed {
+				newznab_stats.RecordRateLimited(indexerId, newznab_stats.OperationDownload)
+				return indexerId, nil, errors.New("rate limit exceeded")
+			}
 		}
 	}
 
 	u, err := url.Parse(link)
 	if err != nil {
-		return nil, err
+		return indexerId, nil, err
 	}
 
-	return u, nil
+	return indexerId, u, nil
 }
 
-func (sti stremThruIndexer) Download(link string) (io.ReadCloser, http.Header, error) {
-	file, err := nzb_info.FetchNZBFile(link, "", log)
+func (sti stremThruIndexer) Download(link string, indexerId int64) (io.ReadCloser, http.Header, error) {
+	file, err := nzb_info.FetchNZBFile(link, "", log,
+		nzb_info.WithIndexerId(indexerId),
+		nzb_info.WithOnFetched(func(nzbFile *nzb_info.NZBFile, err error, latency time.Duration) {
+			var bytes int64
+			if nzbFile != nil {
+				bytes = int64(len(nzbFile.Blob))
+			}
+			newznab_stats.RecordDownload(indexerId, latency, bytes, err)
+		}),
+	)
 	if err != nil {
 		return nil, nil, err
 	}

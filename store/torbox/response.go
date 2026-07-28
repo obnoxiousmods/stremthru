@@ -71,6 +71,10 @@ func (r *Response[T]) Unmarshal(res *http.Response, body []byte, v any) error {
 		r.Error = ErrorCodeUnknownError
 		r.Detail = string(body)
 		return nil
+	case strings.Contains(contentType, "text/html") && res.StatusCode >= 400 && len(body) <= 512:
+		r.Error = ErrorCodeUnknownError
+		r.Detail = string(body)
+		return nil
 	default:
 		return errors.New("unexpected content type: " + contentType)
 	}

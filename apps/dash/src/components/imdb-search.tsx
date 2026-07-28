@@ -1,3 +1,4 @@
+import { CommandLoading } from "cmdk";
 import { SearchIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -23,8 +24,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
 export function IMDBSearch({
   onSelect,
+  triggerLabel = "Search...",
 }: {
   onSelect: (title: IMDBTitle) => void;
+  triggerLabel?: string;
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [_searchQuery, setSearchQuery] = useState("");
@@ -40,7 +43,7 @@ export function IMDBSearch({
           role="combobox"
           variant="outline"
         >
-          Search...
+          <span className="truncate">{triggerLabel}</span>
           <SearchIcon className="opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -52,7 +55,13 @@ export function IMDBSearch({
             value={_searchQuery}
           />
           <CommandList>
-            <CommandEmpty>IMDB Titles</CommandEmpty>
+            {autocompleteResults.isLoading && _searchQuery ? (
+              <CommandLoading className="py-6 text-center text-sm">
+                Searching...
+              </CommandLoading>
+            ) : (
+              <CommandEmpty>IMDB Titles</CommandEmpty>
+            )}
             {autocompleteResults.data?.map((title) => (
               <CommandItem
                 key={title.id}

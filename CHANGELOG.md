@@ -1,5 +1,234 @@
 # Changelog
 
+## [0.102.2](https://github.com/MunifTanjim/stremthru/compare/0.102.1...0.102.2) (2026-06-10)
+
+
+### Bug Fixes
+
+* **store/stremthru:** fix double nzb for own newznab nzb link ([b198844](https://github.com/MunifTanjim/stremthru/commit/b198844c6fa915baebf6593ba768ba9b1d2e4195))
+
+## [0.102.1](https://github.com/MunifTanjim/stremthru/compare/0.102.0...0.102.1) (2026-06-01)
+
+
+### Bug Fixes
+
+* **store:** fix nil pointer dereference for check magnet ([b1eb651](https://github.com/MunifTanjim/stremthru/commit/b1eb651f22df22be2c97e0fbedf95a6b133e77dc))
+
+## [0.102.0](https://github.com/MunifTanjim/stremthru/compare/0.101.7...0.102.0) (2026-05-29)
+
+
+### Features
+
+* **bitmagnet:** allow progress reset from dashboard ([dc7ff22](https://github.com/MunifTanjim/stremthru/commit/dc7ff22b579fb812ff8fd29ad8d3da54c1a2a29e))
+* **config:** re-organize feature list ([424bbbd](https://github.com/MunifTanjim/stremthru/commit/424bbbda8e897b845b97a9d21b5cd96e3bb69893))
+* **dash/settings:** make all config sections collapsible ([7bf6f16](https://github.com/MunifTanjim/stremthru/commit/7bf6f161bc6c6eb399b132e872a869dca03bd3ab))
+* **dmm_hashlist:** allow progress reset from dashboard ([852891d](https://github.com/MunifTanjim/stremthru/commit/852891de6f30da104a7a8e359a9b69fc4d2c1510))
+* **newznab:** add indexer stats ([d077c65](https://github.com/MunifTanjim/stremthru/commit/d077c658e4bc6ff81c6c1a8d16085c78e0651abf))
+* **newznab:** add tunnel settings for indexer ([1076fce](https://github.com/MunifTanjim/stremthru/commit/1076fce189dd37b31b6b4f758efb485727c2f32b))
+* **newznab:** support newznab for individual indexer ([d822032](https://github.com/MunifTanjim/stremthru/commit/d822032fef855498ffac595d0a5a60949719f98d))
+* **sabnzbd:** support mode - get_cats, history, queue ([f3a4713](https://github.com/MunifTanjim/stremthru/commit/f3a4713a2e0795ec25162a1c1b11ad712a0f603b))
+* **store:** forward retry-after header ([7060cec](https://github.com/MunifTanjim/stremthru/commit/7060cecd0f2647246ccbb822aeb81c1efe5b1625))
+* **stremio:** strictly validate stream filter ([ac167c3](https://github.com/MunifTanjim/stremthru/commit/ac167c3e41e62837509c87d44b3610e89eda28b1))
+* **torrent_info:** revamp dashboard torrent info page ([edc1e64](https://github.com/MunifTanjim/stremthru/commit/edc1e64836dcf453c60cecf361b65496bb1bc80d))
+* **torrent_info:** revamp dashboard torrent info page ([8e851e2](https://github.com/MunifTanjim/stremthru/commit/8e851e2c9cfb0807b484ab15815e58c2202a2084))
+* **torz:** add name in check endpoint response ([7b86760](https://github.com/MunifTanjim/stremthru/commit/7b8676033f73b226bfb01333420022e5042cbf89))
+* **torznab/indexer:** shorten syncinfo error from jackett ([a0a2959](https://github.com/MunifTanjim/stremthru/commit/a0a2959bd90398ec4bbb4a35bd65d3b03db4f50f))
+* **usenet:** record nzb file inspection meta ([b9b0016](https://github.com/MunifTanjim/stremthru/commit/b9b00168749dc0b4a15dcdadc50fb1a3e59f41bd))
+* **usenet:** support tunnel fallback for nzb grab ([97e0e11](https://github.com/MunifTanjim/stremthru/commit/97e0e114897a80f78e05a7c667b9d9890bfbec52))
+
+
+### Bug Fixes
+
+* **dash/usenet:** fix colliding stats chart color ([7a5d19b](https://github.com/MunifTanjim/stremthru/commit/7a5d19bfa55035bda48082addf78d46736cbf39e))
+* **torznab/client:** fix cache key for torrent file download ([f67234a](https://github.com/MunifTanjim/stremthru/commit/f67234ab38084a6880507617cab67abfb8fc2de7))
+* **torznab/client:** fix nil pointer dereference in SetLimit ([0eca6f3](https://github.com/MunifTanjim/stremthru/commit/0eca6f357c03ad4c2faf5e3cae04ce1515a1e07b))
+* **usenet:** purge idle connections from pool info ([a3b8b59](https://github.com/MunifTanjim/stremthru/commit/a3b8b5943abed1dd0f8a30549d4fc656fdb4e9c4))
+
+## [0.101.7](https://github.com/MunifTanjim/stremthru/compare/0.101.6...0.101.7) (2026-05-25)
+
+
+### Bug Fixes
+
+* **mdblist:** deal with undocumented/inconsistent data type ([d3cad16](https://github.com/MunifTanjim/stremthru/commit/d3cad1691e74e9c9da8874b618572eeb90f03742))
+* **store/torbox:** extract error message from html response ([6f6322d](https://github.com/MunifTanjim/stremthru/commit/6f6322de9cd50a5965d2d177ae5cd75647952797))
+* **stremio/store:** fix panic on bad request for unsupported store ([ab094ac](https://github.com/MunifTanjim/stremthru/commit/ab094ac02afef0a4b6d160facc5c56ebb8d00661))
+* **torrent_info:** fix lingering data on re-parse ([c2cf2cd](https://github.com/MunifTanjim/stremthru/commit/c2cf2cd151e03137c4a43e55cc2674aca93efe7e))
+* **torrent_info:** fix OOM when parsing bad titles ([ad8fc1f](https://github.com/MunifTanjim/stremthru/commit/ad8fc1f6d9dcdb92f6dfab17ec3a4d896ff36746))
+
+## [0.101.6](https://github.com/MunifTanjim/stremthru/compare/0.101.5...0.101.6) (2026-05-21)
+
+
+### Bug Fixes
+
+* **newznab:** adjust queries in stremthru indexer ([c3afea2](https://github.com/MunifTanjim/stremthru/commit/c3afea2421497ccfb1a17b16a0e09f9b93d5cd63))
+* **torz:** fix error handling for add torz ([b8972d9](https://github.com/MunifTanjim/stremthru/commit/b8972d93bb4f348c673527f11858d6567fdb9441))
+* **usenet:** fix HashNZBFileLink for newznab api t=g ([46d5e9d](https://github.com/MunifTanjim/stremthru/commit/46d5e9d194afd73a06ba74c0dec4405648033915))
+
+## [0.101.5](https://github.com/MunifTanjim/stremthru/compare/0.101.4...0.101.5) (2026-05-13)
+
+
+### Bug Fixes
+
+* **torz:** remove duplicate add torz tracking ([e488982](https://github.com/MunifTanjim/stremthru/commit/e488982ac8d74fa9ae9e33b3746e33f1aea186a5))
+
+## [0.101.4](https://github.com/MunifTanjim/stremthru/compare/0.101.3...0.101.4) (2026-05-13)
+
+
+### Bug Fixes
+
+* **store/realdebrid:** track http status 451 for add torz ([d6af410](https://github.com/MunifTanjim/stremthru/commit/d6af410ad3d775bfa8e13485c98660a0f6c6fb9a))
+
+## [0.101.3](https://github.com/MunifTanjim/stremthru/compare/0.101.2...0.101.3) (2026-05-13)
+
+
+### Bug Fixes
+
+* **store/realdebrid:** update user-agent ([ecffff0](https://github.com/MunifTanjim/stremthru/commit/ecffff02b02614dfc8f6fa7e55e836b8a37828cb))
+
+## [0.101.2](https://github.com/MunifTanjim/stremthru/compare/0.101.1...0.101.2) (2026-05-09)
+
+
+### Bug Fixes
+
+* **letterboxd:** fix typo for cache write ([176c18a](https://github.com/MunifTanjim/stremthru/commit/176c18a46a0e1d720dc229fa4b31957e9f43f8db))
+
+## [0.101.1](https://github.com/MunifTanjim/stremthru/compare/0.101.0...0.101.1) (2026-05-08)
+
+
+### Bug Fixes
+
+* **stremio/store:** add stremthru usenet prefix to getIdPrefixes ([5eff9e4](https://github.com/MunifTanjim/stremthru/commit/5eff9e4b91626917cae67486db7f132d3789bf8c))
+* **torrent_stream:** save title for audio streams in mediainfo ([de7bb54](https://github.com/MunifTanjim/stremthru/commit/de7bb54cedf8e402e6cecdb904856b807e170288))
+
+## [0.101.0](https://github.com/MunifTanjim/stremthru/compare/0.100.9...0.101.0) (2026-05-03)
+
+
+### Features
+
+* **sabnzbd:** support mode - get_config, status, version ([b243983](https://github.com/MunifTanjim/stremthru/commit/b243983c8429b664806f7a1bbf853fbcf1692b62))
+* **usenet:** add webdav endpoint ([ffcbb7c](https://github.com/MunifTanjim/stremthru/commit/ffcbb7ca942132731e57aaf1928be56a915a10a4))
+* **usenet:** support re-queue all nzbs ([5da1e0a](https://github.com/MunifTanjim/stremthru/commit/5da1e0a3c2de0a5cbac7ebdd0448fec0ef476cae))
+
+
+### Bug Fixes
+
+* **imdb_title:** fix dataset parsing error ([dbb8b2b](https://github.com/MunifTanjim/stremthru/commit/dbb8b2bfeca9e69210e22616f0b89a5992542fa1))
+* **usenet:** do not set alias unnecessarily ([5965ee3](https://github.com/MunifTanjim/stremthru/commit/5965ee3733fe3a03bfe10a97732bd2c837aa95a7))
+* **usenet:** fix HashNZBFileLink for newznab api t=get ([a7e7b54](https://github.com/MunifTanjim/stremthru/commit/a7e7b549a2ce57ef9faef656abad70061651cd64))
+
+## [0.100.9](https://github.com/MunifTanjim/stremthru/compare/0.100.8...0.100.9) (2026-05-02)
+
+
+### Bug Fixes
+
+* **stremio:** improve language in transformer ([64d283b](https://github.com/MunifTanjim/stremthru/commit/64d283b222095830d0af9d34d671095119c26f4d))
+
+## [0.100.8](https://github.com/MunifTanjim/stremthru/compare/0.100.7...0.100.8) (2026-05-02)
+
+
+### Bug Fixes
+
+* **usenet:** improve provider utilization logic ([1d855fc](https://github.com/MunifTanjim/stremthru/commit/1d855fc878bbaab074c0a9b0b891b962b98fd325))
+
+## [0.100.7](https://github.com/MunifTanjim/stremthru/compare/0.100.6...0.100.7) (2026-04-26)
+
+
+### Bug Fixes
+
+* **stremio/wrap:** add workaround for non-standard p2p addon ([efe5965](https://github.com/MunifTanjim/stremthru/commit/efe5965d12fa6801448eb239d7ac90ae3a18225e))
+
+## [0.100.6](https://github.com/MunifTanjim/stremthru/compare/0.100.5...0.100.6) (2026-04-26)
+
+
+### Bug Fixes
+
+* **stremio/wrap:** add workaround for non-standard p2p addon ([7ec4278](https://github.com/MunifTanjim/stremthru/commit/7ec427855c715fd3ffb437aafd4a9b3af7bb2153))
+
+## [0.100.5](https://github.com/MunifTanjim/stremthru/compare/0.100.4...0.100.5) (2026-04-26)
+
+
+### Bug Fixes
+
+* **store/torbox:** deal with inconsistent data type ([4184c16](https://github.com/MunifTanjim/stremthru/commit/4184c1649839f7a29607f61ef8d5e5d9acc0d5fb))
+
+## [0.100.4](https://github.com/MunifTanjim/stremthru/compare/0.100.3...0.100.4) (2026-04-25)
+
+
+### Bug Fixes
+
+* **stremio/store:** add missing media_info data for stream ([ef304bb](https://github.com/MunifTanjim/stremthru/commit/ef304bb600a5b8c70c55a6c92eb93c8ac6b61f28))
+* **usenet:** detect file alias from par2 ([68c2edb](https://github.com/MunifTanjim/stremthru/commit/68c2edb110478dcabb5bf79402cdb50904daf7fd))
+
+## [0.100.3](https://github.com/MunifTanjim/stremthru/compare/0.100.2...0.100.3) (2026-04-20)
+
+
+### Bug Fixes
+
+* **config:** keep imdb_title enabled for stremio_newz ([c3647ab](https://github.com/MunifTanjim/stremthru/commit/c3647ab848767a77b4d1aea00402e7cbffbfae7f))
+
+## [0.100.2](https://github.com/MunifTanjim/stremthru/compare/0.100.1...0.100.2) (2026-04-19)
+
+
+### Bug Fixes
+
+* **newz:** update nzbget preset grab header ([c915f8b](https://github.com/MunifTanjim/stremthru/commit/c915f8bd53049dad1451018dd4c3183a18b288c2))
+* **store/realdebrid:** deal with inconsistent type in response ([abc9280](https://github.com/MunifTanjim/stremthru/commit/abc9280a9d21c53a2e7884bf42be9a25960d7459))
+* **worker:** hide disabled workers in dashboard ([40305e5](https://github.com/MunifTanjim/stremthru/commit/40305e5710d5995a20325a9b58fd9ffd3498f15b))
+
+## [0.100.1](https://github.com/MunifTanjim/stremthru/compare/0.100.0...0.100.1) (2026-04-17)
+
+
+### Bug Fixes
+
+* **stremio/torz:** handle nil pointer dereference for media info ([65ba38f](https://github.com/MunifTanjim/stremthru/commit/65ba38f711b2663c61b079aa37052693bf08016d))
+
+## [0.100.0](https://github.com/MunifTanjim/stremthru/compare/0.99.1...0.100.0) (2026-04-17)
+
+
+### Features
+
+* add maintenance mode ([de44654](https://github.com/MunifTanjim/stremthru/commit/de446548e5f84853e6f8101087e278eb15c191ba))
+* **config:** update cdn hostnames for torbox ([62fc51a](https://github.com/MunifTanjim/stremthru/commit/62fc51a91099b4da16ce6b16e31edd1523674005))
+* **dash/settings:** add page for viewing config ([013b6d1](https://github.com/MunifTanjim/stremthru/commit/013b6d19096607f1e4a9361c2eeda16a1809a117))
+* **dash/torrent:** add page for torrent info ([f596c62](https://github.com/MunifTanjim/stremthru/commit/f596c62afd94199120bd22cd0e617a174bfd2237))
+* **newznab:** include indexer info in attributes ([5d590a0](https://github.com/MunifTanjim/stremthru/commit/5d590a0f8ef70f9d5cece1c42ceb8d66289fa622))
+* **stremio/list:** support new trakt domain ([d7110f5](https://github.com/MunifTanjim/stremthru/commit/d7110f5f37637240fd84630ec25af7c82a79ea7f))
+* **stremio/torz:** integrate media info in stream list ([5e0b3d7](https://github.com/MunifTanjim/stremthru/commit/5e0b3d755c1c5d663ac516ca8d9c1f2044f4702f))
+* **stremio:** hide noisy site in default stream template ([2ee0e74](https://github.com/MunifTanjim/stremthru/commit/2ee0e74cc3eeaa98925caea62273ae4884cfa2e5))
+* **torrent_stream:** queue media info probing from store endpoint ([e73258d](https://github.com/MunifTanjim/stremthru/commit/e73258d55ff283e8d3ae0759e1e3048a34ce722f))
+* **torrent_stream:** queue media info probing from store torz endpoint ([71457ed](https://github.com/MunifTanjim/stremthru/commit/71457ed14afd6fcfd0d96cc25a069dd5c2453910))
+* **torrent_stream:** support media info from realdebrid ([44ed542](https://github.com/MunifTanjim/stremthru/commit/44ed542da8ba78d8772fc49c302a0abc7d0d83e6))
+* **torznab/indexer:** add support for generic torznab ([d48cc69](https://github.com/MunifTanjim/stremthru/commit/d48cc69aff1b3188f87e326632669df92d692f36))
+* **torznab/indexer:** prioritize syncing never before synced items ([c591bfc](https://github.com/MunifTanjim/stremthru/commit/c591bfc002dcf62cddb4945fbc040c8bea3878a7))
+* **torznab/indexer:** support search mode for forcing query ([cd0f995](https://github.com/MunifTanjim/stremthru/commit/cd0f9953a3687e4a856261f24ba2de7e25d9dd36))
+* **torznab/indexer:** support toggle for anime only indexer ([bf42743](https://github.com/MunifTanjim/stremthru/commit/bf427433b6e6d561be910831c723f40aaf89449c))
+* **torznab:** extract season, ep and use proper db queries ([8d3bdad](https://github.com/MunifTanjim/stremthru/commit/8d3bdad88f5728202c5e3497322df45953f18c7a))
+* upgrade to golang 1.26 ([804da7d](https://github.com/MunifTanjim/stremthru/commit/804da7d995638e6debc69e4c7f1b4d6ce4a95b72))
+* **usenet:** add stats ([0670f3f](https://github.com/MunifTanjim/stremthru/commit/0670f3fb54e9cd14d51c1f3f968df3fa45dfeb4a))
+* **usenet:** support streaming for encrypted 7z archive ([5dace7a](https://github.com/MunifTanjim/stremthru/commit/5dace7a425deb87c5056ef0b4f684bca8aa7af95))
+
+
+### Bug Fixes
+
+* **anidb:** handle boundary-less map in AniDBTVDBEpisodeMaps.GetByAnidbEpisode ([ebdf58d](https://github.com/MunifTanjim/stremthru/commit/ebdf58dbd64a2ee3cf650251ba2e2a16b360d6dc))
+* **config:** fix concurrent map access for tunnel ([abf232a](https://github.com/MunifTanjim/stremthru/commit/abf232a066399f4659ffb8a1f0b980f692d1ccb7))
+* **dash/torrent:** fix scroll area for indexer queries popover ([45e6b21](https://github.com/MunifTanjim/stremthru/commit/45e6b21c86d069a659cc7a9dc7a34af031af5b21))
+* **stremio/transformer:** update extractor for mediafusion ([cd5a26c](https://github.com/MunifTanjim/stremthru/commit/cd5a26cf4eb21f4a716debe0612d1740572c5c54))
+* **stremio:** fix CatalogHandlerResponse json tags ([ddc38e5](https://github.com/MunifTanjim/stremthru/commit/ddc38e566e324ffc7b94c6bbeaf3b39f4e8915cc))
+* **torrent_info:** ignore malicious torrent title ([0ce4d1a](https://github.com/MunifTanjim/stremthru/commit/0ce4d1a5d142c3f122648b811145e3db5f44808c))
+* **torrent_stream:** ignore malicious file ([9cf1ccc](https://github.com/MunifTanjim/stremthru/commit/9cf1ccc305f1e958199c3f05d423554aa33c45be))
+* **torznab/indexer:** properly handle rate limit znab error ([36a3f40](https://github.com/MunifTanjim/stremthru/commit/36a3f40f17e18c04c700aad3bdb5217a36baea82))
+* **torznab/jackett:** consider magneturl attr for extracting info ([f27c7db](https://github.com/MunifTanjim/stremthru/commit/f27c7db32f1688f27c417b07cb90a09956b5642a))
+* **torznab:** record generic indexer name in torrrent_info ([50c4a74](https://github.com/MunifTanjim/stremthru/commit/50c4a7460a6195b600057a7a04f514008b123057))
+* **znab:** make CapsSearchingItem.SupportsParam concurrency safe ([36a81ed](https://github.com/MunifTanjim/stremthru/commit/36a81ededab5d832f3bf5ee0c40bbebe9fe295da))
+* **znab:** normalize anime title in GetQueryMeta ([2611dcd](https://github.com/MunifTanjim/stremthru/commit/2611dcd56f53c9c13ca0c921101a5b99abbf57ce))
+
+
+### Performance Improvements
+
+* **db:** run pragma optimize on startup for sqlite ([4e3a671](https://github.com/MunifTanjim/stremthru/commit/4e3a671ea198597a5c45492aa80c9d622dc52183))
+* **torznab/indexer:** optimize db indices ([8c22252](https://github.com/MunifTanjim/stremthru/commit/8c22252a7ef997b26a8a33ece8ab2519a1180c94))
+
 ## [0.99.1](https://github.com/MunifTanjim/stremthru/compare/0.99.0...0.99.1) (2026-03-20)
 
 

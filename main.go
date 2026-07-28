@@ -14,25 +14,19 @@ import (
 	"github.com/MunifTanjim/stremthru/internal/db"
 	"github.com/MunifTanjim/stremthru/internal/endpoint"
 	"github.com/MunifTanjim/stremthru/internal/job"
+	newznab_indexer "github.com/MunifTanjim/stremthru/internal/newznab/indexer"
+	newznab_stats "github.com/MunifTanjim/stremthru/internal/newznab/stats"
 	"github.com/MunifTanjim/stremthru/internal/posthog"
 	"github.com/MunifTanjim/stremthru/internal/shared"
 	usenetmanager "github.com/MunifTanjim/stremthru/internal/usenet/manager"
+	"github.com/MunifTanjim/stremthru/internal/util"
 	"github.com/MunifTanjim/stremthru/internal/worker"
 	"github.com/MunifTanjim/stremthru/store"
 )
 
 func main() {
 	config.PrintConfig(&config.AppState{
-		StoreNames: []string{
-			string(store.StoreNameAlldebrid),
-			string(store.StoreNameDebridLink),
-			string(store.StoreNameEasyDebrid),
-			string(store.StoreNameOffcloud),
-			string(store.StoreNamePikPak),
-			string(store.StoreNamePremiumize),
-			string(store.StoreNameRealDebrid),
-			string(store.StoreNameTorBox),
-		},
+		StoreNames: util.SliceMapToString(store.StoreNames),
 	})
 
 	posthog.Init()
@@ -43,8 +37,15 @@ func main() {
 	db.Ping()
 	RunSchemaMigration(database.URI, database)
 
+	if err := newznab_indexer.LoadIndexerIDByHostnameMap(); err != nil {
+		log.Fatalf("failed to load newznab indexer id by hostname map: %v\n", err)
+	}
+
 	defer cache.ClosePersistentCaches()
 	defer usenetmanager.Close()
+
+	newznab_stats.InitBackgroundJob()
+	defer newznab_stats.CleanupBackgroundJob()
 
 	stopWorkers := worker.InitWorkers()
 	defer stopWorkers()
@@ -57,6 +58,7 @@ func main() {
 	endpoint.AddRootEndpoint(mux)
 	endpoint.AddDashEndpoint(mux)
 	endpoint.AddAuthEndpoints(mux)
+	endpoint.AddMaintenanceEndpoint(mux)
 	endpoint.AddHealthEndpoints(mux)
 	endpoint.AddMetaEndpoints(mux)
 	endpoint.AddProxyEndpoints(mux)

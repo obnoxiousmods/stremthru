@@ -5,6 +5,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -53,7 +54,12 @@ func (css *CommaSeperatedString) Scan(value any) error {
 
 type CommaSeperatedInt []int
 
+const maxCommaSeperatedIntLen = 2048
+
 func (csi CommaSeperatedInt) Value() (driver.Value, error) {
+	if len(csi) > maxCommaSeperatedIntLen {
+		return nil, fmt.Errorf("CommaSeperatedInt length %d exceeds max %d", len(csi), maxCommaSeperatedIntLen)
+	}
 	css := make(CommaSeperatedString, len(csi))
 	for i := range csi {
 		css[i] = strconv.Itoa(csi[i])
@@ -247,6 +253,19 @@ func (ti *TorrentInfo) parse() error {
 		return err
 	}
 
+	if len(r.Episodes) > maxCommaSeperatedIntLen {
+		log.Warn("parsed episodes oversized, dropping", "title", ti.TorrentTitle, "count", len(r.Episodes))
+		r.Episodes = nil
+	}
+	if len(r.Seasons) > maxCommaSeperatedIntLen {
+		log.Warn("parsed seasons oversized, dropping", "title", ti.TorrentTitle, "count", len(r.Seasons))
+		r.Seasons = nil
+	}
+	if len(r.Volumes) > maxCommaSeperatedIntLen {
+		log.Warn("parsed volumes oversized, dropping", "title", ti.TorrentTitle, "count", len(r.Volumes))
+		r.Volumes = nil
+	}
+
 	ti.ParsedAt = db.Timestamp{Time: time.Now()}
 	ti.ParserVersion = ptt.Version().Int()
 	ti.ParserInput = ti.TorrentTitle
@@ -259,9 +278,10 @@ func (ti *TorrentInfo) parse() error {
 	ti.Complete = r.Complete
 	ti.Container = r.Container
 	ti.Convert = r.Convert
+	ti.Date = db.DateOnly{}
 	if r.Date != "" {
 		if date, err := time.Parse(time.DateOnly, r.Date); err == nil {
-			ti.Date = db.DateOnly{Time: date}
+			ti.Date.Time = date
 		}
 	}
 	ti.Documentary = r.Documentary
@@ -291,11 +311,13 @@ func (ti *TorrentInfo) parse() error {
 	}
 	ti.Subbed = r.Subbed
 	ti.ThreeD = r.ThreeD
-	ti.Title = r.Title
+	ti.Title = strings.ToValidUTF8(r.Title, "�")
 	ti.Uncensored = r.Uncensored
 	ti.Unrated = r.Unrated
 	ti.Upscaled = r.Upscaled
 	ti.Volumes = r.Volumes
+	ti.Year = 0
+	ti.YearEnd = 0
 	if r.Year != "" {
 		year, year_end, _ := strings.Cut(r.Year, "-")
 		ti.Year, _ = strconv.Atoi(year)
@@ -703,7 +725,7 @@ var query_upsert_cond_should_update_size = fmt.Sprintf(
 	query_upsert_cond_new_source_is_dht, query_upsert_cond_old_size_missing,
 )
 var query_upsert_cond_should_update_indexer = fmt.Sprintf(
-	`(EXCLUDED.%s != '' AND ti.%s != EXCLUDED.%s)`,
+	`(EXCLUDED.%s NOT IN ('', 'bitmagnet') AND ti.%s != EXCLUDED.%s)`,
 	Column.Indexer, Column.Indexer, Column.Indexer,
 )
 var query_upsert_cond_should_update_category = fmt.Sprintf(
@@ -749,7 +771,7 @@ var query_upsert_on_conflict = fmt.Sprintf(
 	}, " OR "),
 )
 
-var noTorrentInfo = !config.Feature.HasTorrentInfo()
+var noTorrentInfo = !config.Feature.HasTorz()
 
 var upsertSkipCount atomic.Int64
 var upsertAllowCount atomic.Int64
@@ -773,6 +795,10 @@ func get_upsert_query(count int) string {
 	return query_upsert_before_values +
 		util.RepeatJoin(query_upsert_values_placeholder, count, ",") +
 		query_upsert_on_conflict
+}
+
+func shouldDiscardTorrentTitle(hash, ttitle string) bool {
+	return ttitle == "" || ttitle == hash || strings.HasPrefix(ttitle, "magnet:?") || strings.ToLower(filepath.Ext(ttitle)) == ".exe"
 }
 
 func Upsert(items []TorrentInfoInsertData, category TorrentInfoCategory, discardFileIdx bool) error {
@@ -801,7 +827,8 @@ func Upsert(items []TorrentInfoInsertData, category TorrentInfoCategory, discard
 			}
 
 			tSource := string(t.Source)
-			shouldIgnoreFiles := t.Source == TorrentInfoSourceOffcloud || (t.Source == TorrentInfoSourcePremiumize && !t.Files.HasVideo())
+			hasVideoFile := t.Files.HasVideo()
+			shouldIgnoreFiles := t.Source == TorrentInfoSourceOffcloud || (t.Source == TorrentInfoSourcePremiumize && !hasVideoFile) || (!hasVideoFile && t.Files.HasMaliciousFile())
 			if !shouldIgnoreFiles {
 				for _, f := range t.Files {
 					if !strings.HasPrefix(f.Path, "/") {
@@ -820,15 +847,15 @@ func Upsert(items []TorrentInfoInsertData, category TorrentInfoCategory, discard
 				}
 			}
 
-			fingerprint := xxh3.HashString(t.TorrentTitle + "|" + strconv.FormatInt(t.Size, 10) + "|" + strconv.FormatBool(t.Private))
-			var prev prevRecordData
-			if prevRecordCache.Get(t.Hash, &prev) && (prev.Source == tSource || prev.Source == string(TorrentInfoSourceDHT) || prev.Fingerprint == fingerprint) {
-				upsertSkipCount.Add(1)
+			if shouldDiscardTorrentTitle(t.Hash, t.TorrentTitle) {
 				count--
 				continue
 			}
 
-			if t.TorrentTitle == "" || t.TorrentTitle == t.Hash || strings.HasPrefix(t.TorrentTitle, "magnet:?") {
+			fingerprint := xxh3.HashString(t.TorrentTitle + "|" + strconv.FormatInt(t.Size, 10) + "|" + strconv.FormatBool(t.Private))
+			var prev prevRecordData
+			if prevRecordCache.Get(t.Hash, &prev) && (prev.Source == tSource || prev.Source == string(TorrentInfoSourceDHT) || prev.Fingerprint == fingerprint) {
+				upsertSkipCount.Add(1)
 				count--
 				continue
 			}
@@ -1216,6 +1243,38 @@ func ListHashesByStremId(stremId string) ([]string, error) {
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		log.Error("failed to list hashes by strem id", "error", err, "stremId", stremId)
+		return nil, err
+	}
+	defer rows.Close()
+
+	hashes := []string{}
+	for rows.Next() {
+		var hash string
+		if err := rows.Scan(&hash); err != nil {
+			return nil, err
+		}
+		hashes = append(hashes, hash)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return hashes, nil
+}
+
+func ListHashesByTitleQuery(query string, limit int) ([]string, error) {
+	// Convert glob to SQL LIKE
+	query = strings.ReplaceAll(query, "*", "%")
+	query = strings.ReplaceAll(query, "?", "_")
+	if !strings.ContainsAny(query, "%_") {
+		query = "%" + query + "%"
+	}
+
+	sqlQuery := fmt.Sprintf("SELECT %s FROM %s WHERE %s LIKE ? LIMIT ?", Column.Hash, TableName, Column.TorrentTitle)
+	rows, err := db.Query(sqlQuery, query, limit)
+	if err != nil {
+		log.Error("failed to list hashes by title query", "error", err, "query", query)
 		return nil, err
 	}
 	defer rows.Close()

@@ -30,6 +30,11 @@ const (
 	IndexerTypeGeneric IndexerType = "generic"
 )
 
+const (
+	TunnelForced = "true"
+	TunnelNone   = "false"
+)
+
 func (it IndexerType) IsValid() bool {
 	switch it {
 	case IndexerTypeGeneric:
@@ -47,6 +52,7 @@ type NewznabIndexer struct {
 	APIKey            string
 	RateLimitConfigId sql.NullString
 	Disabled          bool
+	Tunnel            sql.NullString
 	CAt               db.Timestamp
 	UAt               db.Timestamp
 
@@ -103,11 +109,15 @@ func NewNewznabIndexer(url, apiKey string) (*NewznabIndexer, error) {
 }
 
 func (idxr *NewznabIndexer) SetAPIKey(apiKey string) error {
+	if apiKey == "" {
+		return nil
+	}
 	encAPIKey, err := encrypt(apiKey)
 	if err != nil {
 		return err
 	}
 	idxr.APIKey = encAPIKey
+	idxr.apikey = apiKey
 	return nil
 }
 
@@ -125,15 +135,44 @@ func (idxr *NewznabIndexer) GetAPIKey() (string, error) {
 	return idxr.apikey, nil
 }
 
+func ValidateTunnel(value string) error {
+	switch value {
+	case "", TunnelForced, TunnelNone:
+		return nil
+	default:
+		u, err := url.Parse(value)
+		if err != nil {
+			return fmt.Errorf("invalid tunnel: %w", err)
+		}
+		if u.Host == "" {
+			return fmt.Errorf("invalid tunnel: missing host")
+		}
+		switch u.Scheme {
+		case "http", "https", "socks5", "socks5h":
+		case "":
+			return fmt.Errorf("invalid tunnel: missing scheme")
+		default:
+			return fmt.Errorf("invalid tunnel: unsupported scheme '%s' (must be http, https, socks5, or socks5h)", u.Scheme)
+		}
+		return nil
+	}
+}
+
 func (idxr *NewznabIndexer) Validate() error {
 	apiKey, err := idxr.GetAPIKey()
 	if err != nil {
 		return fmt.Errorf("failed to decrypt api key: %w", err)
 	}
 
+	httpClient := idxr.getHTTPClient()
+	if _, err := config.IP.GetIP(httpClient); err != nil {
+		return fmt.Errorf("failed to resolve IP for tunnel: %w", err)
+	}
+
 	client := newznab_client.NewClient(&newznab_client.ClientConfig{
-		BaseURL: idxr.URL,
-		APIKey:  apiKey,
+		BaseURL:    idxr.URL,
+		APIKey:     apiKey,
+		HTTPClient: httpClient,
 	})
 
 	caps, err := client.GetCaps()
@@ -156,6 +195,7 @@ var Column = struct {
 	APIKey            string
 	RateLimitConfigId string
 	Disabled          string
+	Tunnel            string
 	CAt               string
 	UAt               string
 }{
@@ -166,6 +206,7 @@ var Column = struct {
 	APIKey:            "api_key",
 	RateLimitConfigId: "rate_limit_config_id",
 	Disabled:          "disabled",
+	Tunnel:            "tunnel",
 	CAt:               "cat",
 	UAt:               "uat",
 }
@@ -178,16 +219,9 @@ var columns = []string{
 	Column.APIKey,
 	Column.RateLimitConfigId,
 	Column.Disabled,
+	Column.Tunnel,
 	Column.CAt,
 	Column.UAt,
-}
-
-var columnsInsert = []string{
-	Column.Type,
-	Column.Name,
-	Column.URL,
-	Column.APIKey,
-	Column.RateLimitConfigId,
 }
 
 var query_get_all = fmt.Sprintf(
@@ -206,7 +240,7 @@ func GetAll() ([]NewznabIndexer, error) {
 	items := []NewznabIndexer{}
 	for rows.Next() {
 		item := NewznabIndexer{}
-		if err := rows.Scan(&item.Id, &item.Type, &item.Name, &item.URL, &item.APIKey, &item.RateLimitConfigId, &item.Disabled, &item.CAt, &item.UAt); err != nil {
+		if err := rows.Scan(&item.Id, &item.Type, &item.Name, &item.URL, &item.APIKey, &item.RateLimitConfigId, &item.Disabled, &item.Tunnel, &item.CAt, &item.UAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -235,7 +269,7 @@ func GetAllEnabled() ([]NewznabIndexer, error) {
 	items := []NewznabIndexer{}
 	for rows.Next() {
 		item := NewznabIndexer{}
-		if err := rows.Scan(&item.Id, &item.Type, &item.Name, &item.URL, &item.APIKey, &item.RateLimitConfigId, &item.Disabled, &item.CAt, &item.UAt); err != nil {
+		if err := rows.Scan(&item.Id, &item.Type, &item.Name, &item.URL, &item.APIKey, &item.RateLimitConfigId, &item.Disabled, &item.Tunnel, &item.CAt, &item.UAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -257,13 +291,43 @@ func GetById(id int64) (*NewznabIndexer, error) {
 	row := db.QueryRow(query_get_by_id, id)
 
 	item := NewznabIndexer{}
-	if err := row.Scan(&item.Id, &item.Type, &item.Name, &item.URL, &item.APIKey, &item.RateLimitConfigId, &item.Disabled, &item.CAt, &item.UAt); err != nil {
+	if err := row.Scan(&item.Id, &item.Type, &item.Name, &item.URL, &item.APIKey, &item.RateLimitConfigId, &item.Disabled, &item.Tunnel, &item.CAt, &item.UAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
 	}
 	return &item, nil
+}
+
+var query_get_by_host = fmt.Sprintf(
+	`SELECT %s FROM %s WHERE %s = ? OR %s LIKE ? OR %s = ? OR %s LIKE ?`,
+	strings.Join(columns, ", "),
+	TableName,
+	Column.URL, Column.URL, Column.URL, Column.URL,
+)
+
+func GetByHost(host string) ([]NewznabIndexer, error) {
+	httpBase := "http://" + host
+	httpsBase := "https://" + host
+	rows, err := db.Query(query_get_by_host, httpBase, httpBase+"/%", httpsBase, httpsBase+"/%")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []NewznabIndexer{}
+	for rows.Next() {
+		item := NewznabIndexer{}
+		if err := rows.Scan(&item.Id, &item.Type, &item.Name, &item.URL, &item.APIKey, &item.RateLimitConfigId, &item.Disabled, &item.Tunnel, &item.CAt, &item.UAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 var query_get_by_url = fmt.Sprintf(
@@ -277,7 +341,7 @@ func GetByURL(url string) (*NewznabIndexer, error) {
 	row := db.QueryRow(query_get_by_url, url)
 
 	item := NewznabIndexer{}
-	if err := row.Scan(&item.Id, &item.Type, &item.Name, &item.URL, &item.APIKey, &item.RateLimitConfigId, &item.Disabled, &item.CAt, &item.UAt); err != nil {
+	if err := row.Scan(&item.Id, &item.Type, &item.Name, &item.URL, &item.APIKey, &item.RateLimitConfigId, &item.Disabled, &item.Tunnel, &item.CAt, &item.UAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -287,9 +351,16 @@ func GetByURL(url string) (*NewznabIndexer, error) {
 }
 
 var query_insert = fmt.Sprintf(
-	`INSERT INTO %s (%s) VALUES (?,?,?,?,?)`,
+	`INSERT INTO %s (%s) VALUES (?,?,?,?,?,?)`,
 	TableName,
-	db.JoinColumnNames(columnsInsert...),
+	db.JoinColumnNames(
+		Column.Type,
+		Column.Name,
+		Column.URL,
+		Column.APIKey,
+		Column.RateLimitConfigId,
+		Column.Tunnel,
+	),
 )
 
 func (idxr *NewznabIndexer) Insert() error {
@@ -299,6 +370,7 @@ func (idxr *NewznabIndexer) Insert() error {
 		idxr.URL,
 		idxr.APIKey,
 		idxr.RateLimitConfigId,
+		idxr.Tunnel,
 	)
 	if err != nil {
 		return err
@@ -320,6 +392,7 @@ var query_update = fmt.Sprintf(
 		fmt.Sprintf(`%s = ?`, Column.APIKey),
 		fmt.Sprintf(`%s = ?`, Column.RateLimitConfigId),
 		fmt.Sprintf(`%s = ?`, Column.Disabled),
+		fmt.Sprintf(`%s = ?`, Column.Tunnel),
 		fmt.Sprintf(`%s = %s`, Column.UAt, db.CurrentTimestamp),
 	}, ", "),
 	Column.Id,
@@ -332,9 +405,14 @@ func (idxr *NewznabIndexer) Update() error {
 		idxr.APIKey,
 		idxr.RateLimitConfigId,
 		idxr.Disabled,
+		idxr.Tunnel,
 		idxr.Id,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	invalidateClient(idxr.Id)
+	return nil
 }
 
 var query_set_disabled = fmt.Sprintf(
@@ -358,5 +436,12 @@ var query_delete = fmt.Sprintf(
 
 func Delete(id int64) error {
 	_, err := db.Exec(query_delete, id)
-	return err
+	if err != nil {
+		return err
+	}
+	if err := deleteHostnamesByIndexerID(id); err != nil {
+		log.Error("failed to delete indexer hostnames", "error", err, "indexer_id", id)
+	}
+	invalidateClient(id)
+	return nil
 }

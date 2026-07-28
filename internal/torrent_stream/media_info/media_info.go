@@ -5,10 +5,18 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/MunifTanjim/stremthru/internal/util"
 	"gopkg.in/vansante/go-ffprobe.v2"
 )
+
+const Version = 1
+
+type MediaInfoStreamLanger interface {
+	Lang() string
+}
 
 type MediaInfoVideo struct {
 	Codec  string   `json:"codec,omitempty"`
@@ -23,6 +31,7 @@ type MediaInfoAudio struct {
 	Codec         string `json:"codec,omitempty"`
 	Language      string `json:"lang,omitempty"`
 	Profile       string `json:"profile,omitempty"`
+	Title         string `json:"title,omitempty"`
 
 	Commentary      bool `json:"commentary,omitempty"`
 	Default         bool `json:"default,omitempty"`
@@ -30,6 +39,34 @@ type MediaInfoAudio struct {
 	HearingImpaired bool `json:"hearing_impaired,omitempty"`
 	Original        bool `json:"original,omitempty"`
 	VisualImpaired  bool `json:"visual_impaired,omitempty"`
+}
+
+func (s MediaInfoAudio) Lang() string {
+	return s.Language
+}
+
+func (aud *MediaInfoAudio) Channel() string {
+	if aud.ChannelLayout == "" {
+		switch aud.Channels {
+		case 0:
+			return ""
+		case 1:
+			return "mono"
+		case 2:
+			return "stereo"
+		default:
+			return strconv.Itoa(aud.Channels)
+		}
+	}
+	ch, _, _ := strings.Cut(aud.ChannelLayout, "(")
+	ch = strings.TrimSpace(ch)
+	switch ch {
+	case "", "mono", "stereo", "quad":
+		return ch
+	default:
+		ch, _, _ := strings.Cut(ch, " ")
+		return ch
+	}
 }
 
 type MediaInfoSubtitle struct {
@@ -40,6 +77,23 @@ type MediaInfoSubtitle struct {
 	Default         bool `json:"default,omitempty"`
 	Forced          bool `json:"forced,omitempty"`
 	HearingImpaired bool `json:"hearing_impaired,omitempty"`
+}
+
+func (s MediaInfoSubtitle) Lang() string {
+	switch s.Language {
+	case "spa":
+		if strings.Contains(strings.ToLower(s.Title), "latin") {
+			return "spa(la)"
+		}
+		return s.Language
+	case "por":
+		if strings.Contains(strings.ToLower(s.Title), "br") {
+			return "por(br)"
+		}
+		return s.Language
+	default:
+		return s.Language
+	}
 }
 
 type MediaInfoFormat struct {
@@ -55,6 +109,36 @@ type MediaInfo struct {
 	Subtitle    []MediaInfoSubtitle `json:"subtitle,omitempty"`
 	Format      *MediaInfoFormat    `json:"format,omitempty"`
 	HasChapters bool                `json:"has_chapters,omitempty"`
+	Source      string              `json:"src,omitempty"`
+	Version     int                 `json:"v,omitempty"`
+}
+
+func (mi *MediaInfo) Channels() []string {
+	chs := make([]string, 0, 1)
+	seen := util.NewSet[string]()
+	for i := range mi.Audio {
+		aud := &mi.Audio[i]
+		ch := aud.Channel()
+		if seen.Has(ch) {
+			continue
+		}
+		seen.Add(ch)
+		chs = append(chs, ch)
+	}
+	return chs
+}
+
+func (mi *MediaInfo) ShouldOverwrite(existing *MediaInfo) bool {
+	if existing == nil {
+		return true
+	}
+	if existing.Source == "" {
+		if existing.Version < 1 {
+			return true
+		}
+		return false
+	}
+	return mi.Source == ""
 }
 
 func detectHDR(stream *ffprobe.Stream) []string {
@@ -128,6 +212,7 @@ func Probe(ctx context.Context, url string) (*MediaInfo, error) {
 			Codec:         stream.CodecName,
 			Language:      getTagString(&stream, "language"),
 			Profile:       stream.Profile,
+			Title:         getTagString(&stream, "title"),
 
 			Commentary:      stream.Disposition.Comment == 1,
 			Default:         stream.Disposition.Default == 1,

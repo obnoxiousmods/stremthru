@@ -130,7 +130,7 @@ func syncList(l *MDBListList, apiKey string) error {
 				item := &res.Data[i]
 				l.Items = append(l.Items, MDBListItem{
 					IMDBId:         item.Ids.IMDB,
-					Adult:          item.Adult == 1,
+					Adult:          bool(item.Adult),
 					Title:          item.Title,
 					Poster:         item.Poster,
 					Language:       item.Language,
@@ -167,7 +167,7 @@ func syncList(l *MDBListList, apiKey string) error {
 				}
 				l.Items = append(l.Items, MDBListItem{
 					IMDBId:         item.Ids.IMDB,
-					Adult:          item.Adult == 1,
+					Adult:          bool(item.Adult),
 					Title:          item.Title,
 					Poster:         item.Poster,
 					Language:       item.Language,
@@ -205,7 +205,7 @@ func syncList(l *MDBListList, apiKey string) error {
 				}
 				l.Items = append(l.Items, MDBListItem{
 					IMDBId:         item.Ids.IMDB,
-					Adult:          item.Adult == 1,
+					Adult:          bool(item.Adult),
 					Title:          item.Title,
 					Poster:         item.Poster,
 					Language:       item.Language,

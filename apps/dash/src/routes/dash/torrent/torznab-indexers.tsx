@@ -284,10 +284,20 @@ function TorznabIndexerFormSheet({
     () => ({
       api_key: "",
       name: editItem?.name ?? "",
+      only_anime: editItem?.only_anime ?? false,
       rate_limit_config_id: editItem?.rate_limit_config_id ?? "",
+      search_mode: editItem?.search_mode ?? "auto",
+      type: editItem?.type ?? "jackett",
       url: editItem?.url ?? "",
     }),
-    [editItem?.name, editItem?.rate_limit_config_id, editItem?.url],
+    [
+      editItem?.name,
+      editItem?.only_anime,
+      editItem?.rate_limit_config_id,
+      editItem?.search_mode,
+      editItem?.type,
+      editItem?.url,
+    ],
   );
 
   const form = useAppForm({
@@ -298,14 +308,19 @@ function TorznabIndexerFormSheet({
           api_key: value.api_key,
           id: editItem.id,
           name: value.name,
+          only_anime: value.only_anime,
           rate_limit_config_id: value.rate_limit_config_id || null,
+          search_mode: value.search_mode,
         });
         toast.success("Updated successfully!");
       } else {
         await create.mutateAsync({
           api_key: value.api_key,
           name: value.name,
+          only_anime: value.only_anime,
           rate_limit_config_id: value.rate_limit_config_id || null,
+          search_mode: value.search_mode,
+          type: value.type,
           url: value.url,
         });
         toast.success("Created successfully!");
@@ -344,6 +359,19 @@ function TorznabIndexerFormSheet({
 
           <ScrollArea className="overflow-hidden">
             <div className="flex flex-col gap-4 px-4">
+              <form.AppField name="type">
+                {(field) => (
+                  <field.Select
+                    disabled={Boolean(editItem)}
+                    label="Type"
+                    options={[
+                      { label: "Generic", value: "generic" },
+                      { label: "Jackett", value: "jackett" },
+                    ]}
+                    required
+                  />
+                )}
+              </form.AppField>
               <form.AppField name="name">
                 {(field) => <field.Input label="Name" type="text" />}
               </form.AppField>
@@ -352,6 +380,7 @@ function TorznabIndexerFormSheet({
                   <field.Input
                     disabled={Boolean(editItem)}
                     label="Torznab URL"
+                    required
                   />
                 )}
               </form.AppField>
@@ -365,6 +394,21 @@ function TorznabIndexerFormSheet({
                     options={rateLimitConfigOptions}
                   />
                 )}
+              </form.AppField>
+              <form.AppField name="search_mode">
+                {(field) => (
+                  <field.Select
+                    label="Search Mode"
+                    options={[
+                      { label: "Auto", value: "auto" },
+                      { label: "Query", value: "query" },
+                    ]}
+                    required
+                  />
+                )}
+              </form.AppField>
+              <form.AppField name="only_anime">
+                {(field) => <field.Checkbox label="Only Anime" />}
               </form.AppField>
             </div>
           </ScrollArea>

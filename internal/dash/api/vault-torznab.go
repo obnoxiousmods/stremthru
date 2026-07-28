@@ -18,7 +18,9 @@ type TorznabIndexerResponse struct {
 	URL               string  `json:"url"`
 	IsValid           bool    `json:"is_valid"`
 	RateLimitConfigId *string `json:"rate_limit_config_id"`
+	SearchMode        string  `json:"search_mode"`
 	Disabled          bool    `json:"disabled"`
+	OnlyAnime         bool    `json:"only_anime"`
 	CreatedAt         string  `json:"created_at"`
 	UpdatedAt         string  `json:"updated_at"`
 }
@@ -35,7 +37,9 @@ func toTorznabIndexerResponse(item *torznab_indexer.TorznabIndexer) TorznabIndex
 		Name:              item.Name,
 		URL:               item.URL,
 		RateLimitConfigId: rateLimitConfigId,
+		SearchMode:        string(item.SearchMode),
 		Disabled:          item.Disabled,
+		OnlyAnime:         item.OnlyAnime,
 		CreatedAt:         item.CAt.Format(time.RFC3339),
 		UpdatedAt:         item.UAt.Format(time.RFC3339),
 	}
@@ -62,6 +66,8 @@ type CreateTorznabIndexerRequest struct {
 	APIKey            string                      `json:"api_key"`
 	Name              string                      `json:"name,omitempty"`
 	RateLimitConfigId *string                     `json:"rate_limit_config_id"`
+	SearchMode        torznab_indexer.SearchMode  `json:"search_mode"`
+	OnlyAnime         bool                        `json:"only_anime"`
 }
 
 var ErrorInvalidTorznabCredentials = errors.New("invalid torznab credentials or connection failed")
@@ -78,12 +84,6 @@ func handleCreateTorznabIndexer(w http.ResponseWriter, r *http.Request) {
 		errs = append(errs, Error{
 			Location: "url",
 			Message:  "missing url",
-		})
-	}
-	if request.APIKey == "" {
-		errs = append(errs, Error{
-			Location: "api_key",
-			Message:  "missing api_key",
 		})
 	}
 	if len(errs) > 0 {
@@ -104,6 +104,22 @@ func handleCreateTorznabIndexer(w http.ResponseWriter, r *http.Request) {
 
 	if request.Name != "" {
 		indexer.Name = request.Name
+	}
+
+	if request.SearchMode != "" {
+		indexer.SearchMode = request.SearchMode
+	} else {
+		indexer.SearchMode = torznab_indexer.SearchModeAuto
+	}
+
+	indexer.OnlyAnime = request.OnlyAnime
+
+	if !indexer.SearchMode.IsValid() {
+		ErrorBadRequest(r).Append(Error{
+			Location: "search_mode",
+			Message:  "invalid search mode",
+		}).Send(w, r)
+		return
 	}
 
 	if request.RateLimitConfigId != nil && *request.RateLimitConfigId != "" {
@@ -161,9 +177,11 @@ func handleGetTorznabIndexer(w http.ResponseWriter, r *http.Request) {
 }
 
 type UpdateTorznabIndexerRequest struct {
-	APIKey            string  `json:"api_key"`
-	Name              string  `json:"name,omitempty"`
-	RateLimitConfigId *string `json:"rate_limit_config_id"`
+	APIKey            string                     `json:"api_key"`
+	Name              string                     `json:"name,omitempty"`
+	RateLimitConfigId *string                    `json:"rate_limit_config_id"`
+	SearchMode        torznab_indexer.SearchMode `json:"search_mode"`
+	OnlyAnime         bool                       `json:"only_anime"`
 }
 
 func handleUpdateTorznabIndexer(w http.ResponseWriter, r *http.Request) {
@@ -198,6 +216,20 @@ func handleUpdateTorznabIndexer(w http.ResponseWriter, r *http.Request) {
 
 	if request.Name != "" {
 		indexer.Name = request.Name
+	}
+
+	if request.SearchMode != "" {
+		indexer.SearchMode = request.SearchMode
+	}
+
+	indexer.OnlyAnime = request.OnlyAnime
+
+	if !indexer.SearchMode.IsValid() {
+		ErrorBadRequest(r).Append(Error{
+			Location: "search_mode",
+			Message:  "invalid search mode",
+		}).Send(w, r)
+		return
 	}
 
 	if request.RateLimitConfigId == nil || *request.RateLimitConfigId == "" {

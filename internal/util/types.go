@@ -2,8 +2,26 @@ package util
 
 import (
 	"encoding/json"
+	"errors"
+	"strconv"
 	"time"
 )
+
+type Booleanish bool
+
+func (bish *Booleanish) UnmarshalJSON(data []byte) error {
+	str := string(data)
+	switch str {
+	case `1`, `"1"`, `true`:
+		*bish = true
+		return nil
+	case `0`, `"0"`, `false`:
+		*bish = false
+		return nil
+	default:
+		return errors.New("invalid boolean value: " + str)
+	}
+}
 
 type JSONNumber json.Number
 
@@ -43,4 +61,39 @@ func (rt JSONTime) MarshalJSON() ([]byte, error) {
 		return rt.raw, nil
 	}
 	return json.Marshal(rt.Time)
+}
+
+type MapOrEmptyArray[K comparable, V any] map[K]V
+
+func (m *MapOrEmptyArray[K, V]) UnmarshalJSON(data []byte) error {
+	if len(data) > 0 && data[0] == '[' {
+		*m = make(MapOrEmptyArray[K, V])
+		return nil
+	}
+	var raw map[K]V
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*m = MapOrEmptyArray[K, V](raw)
+	return nil
+}
+
+type StringOrInt int
+
+func (v *StringOrInt) UnmarshalJSON(data []byte) error {
+	var n int
+	if err := json.Unmarshal(data, &n); err == nil {
+		*v = StringOrInt(n)
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return err
+	}
+	*v = StringOrInt(n)
+	return nil
 }

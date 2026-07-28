@@ -84,7 +84,13 @@ export function useWorkerMutation(workerId: string) {
     },
   });
 
-  return { deleteJobLog, purgeJobLogs, purgeTemporaryFiles };
+  const resetProgress = useMutation({
+    mutationFn: async () => {
+      await api(`/workers/${workerId}/progress`, { method: "DELETE" });
+    },
+  });
+
+  return { deleteJobLog, purgeJobLogs, purgeTemporaryFiles, resetProgress };
 }
 
 export function useWorkerTemporaryFiles(workerId: string) {

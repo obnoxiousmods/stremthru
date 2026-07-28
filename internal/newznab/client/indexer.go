@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/MunifTanjim/stremthru/internal/usenet/nzb_info"
 	"github.com/MunifTanjim/stremthru/internal/util"
 	"github.com/MunifTanjim/stremthru/internal/znab"
 )
@@ -57,15 +56,17 @@ func (n *Newz) Age() time.Duration {
 
 func (n *Newz) GetHash() string {
 	if n.Hash == "" {
-		n.Hash = nzb_info.HashNZBFileLink(n.DownloadLink)
+		n.Hash = util.HashNZBFileLink(n.DownloadLink)
 	}
 	return n.Hash
 }
 
 type Indexer interface {
 	GetId() string
+	GetHTTPClient() *http.Client
+	GetCaps() (Caps, error)
 	NewSearchQuery(fn func(caps *znab.Caps) Function) (*Query, error)
-	Search(query url.Values, headers http.Header) ([]Newz, error)
+	Search(query url.Values, headers http.Header) ([]Newz, int64, error)
 }
 
 type ChannelItemIndexer struct {
@@ -159,7 +160,7 @@ type SearchResponse struct {
 	Channel Channel  `xml:"channel"`
 }
 
-func (c *Client) Search(query url.Values, headers http.Header) ([]Newz, error) {
+func (c *Client) Search(query url.Values, headers http.Header) ([]Newz, int64, error) {
 	params := &Ctx{}
 	params.APIKey = query.Get("apikey")
 	query.Del("apikey")
@@ -169,7 +170,7 @@ func (c *Client) Search(query url.Values, headers http.Header) ([]Newz, error) {
 	var resp Response[SearchResponse]
 	_, err := c.Request("GET", "/api", params, &resp)
 	if err != nil {
-		return nil, err
+		return nil, resp.Bytes, err
 	}
 
 	items := resp.Data.Channel.Items
@@ -185,9 +186,13 @@ func (c *Client) Search(query url.Values, headers http.Header) ([]Newz, error) {
 		}
 		result = append(result, *newz)
 	}
-	return result, nil
+	return result, resp.Bytes, nil
 }
 
 func (c *Client) GetId() string {
 	return c.BaseURL.Host
+}
+
+func (c *Client) GetHTTPClient() *http.Client {
+	return c.HTTPClient
 }

@@ -16,6 +16,7 @@ import (
 	store_util "github.com/MunifTanjim/stremthru/internal/store/util"
 	store_video "github.com/MunifTanjim/stremthru/internal/store/video"
 	"github.com/MunifTanjim/stremthru/internal/torrent_info"
+	"github.com/MunifTanjim/stremthru/internal/torz"
 	"github.com/MunifTanjim/stremthru/internal/util"
 	"github.com/MunifTanjim/stremthru/store"
 )
@@ -43,6 +44,17 @@ type AddMagnetPayload struct {
 }
 
 func checkMagnet(r *http.Request, ctx *storecontext.Context, magnets []string, sid string, localOnly bool) (*store.CheckMagnetData, error) {
+	log := server.GetReqCtx(r).Log
+
+	basicInfoByHashCh := make(chan map[string]torrent_info.BasicInfo, 1)
+	go func() {
+		data, err := torrent_info.GetBasicInfoByHash(magnets)
+		if err != nil {
+			log.Error("failed to get basic info by hashes", "error", err)
+		}
+		basicInfoByHashCh <- data
+	}()
+
 	params := &store.CheckMagnetParams{}
 	params.APIKey = ctx.StoreAuthToken
 	params.Magnets = magnets
@@ -53,8 +65,17 @@ func checkMagnet(r *http.Request, ctx *storecontext.Context, magnets []string, s
 	}
 	params.IsTrustedRequest, _ = peer_token.IsValid(peer_token.ExtractFromRequest(r))
 	data, err := ctx.Store.CheckMagnet(params)
-	if err == nil && data.Items == nil {
+	if err != nil {
+		return nil, err
+	}
+	if data.Items == nil {
 		data.Items = []store.CheckMagnetDataItem{}
+	}
+	basicInfoByHash := <-basicInfoByHashCh
+	for i := range data.Items {
+		if info, ok := basicInfoByHash[data.Items[i].Hash]; ok {
+			data.Items[i].Name = info.TorrentTitle
+		}
 	}
 	return data, err
 }
@@ -213,9 +234,7 @@ func addMagnet(ctx *storecontext.Context, magnet string, torrent *multipart.File
 		}
 	}
 	data, err := ctx.Store.AddMagnet(params)
-	if err == nil {
-		buddy.TrackMagnet(ctx.Store, data.Hash, data.Name, data.Size, data.Private, data.Files, "", data.Status != store.MagnetStatusDownloaded, ctx.StoreAuthToken)
-	}
+	torz.TrackAddMagnet(ctx, magnet, data, err)
 	return data, err
 }
 
@@ -248,7 +267,10 @@ func handleStoreMagnetAdd(w http.ResponseWriter, r *http.Request) {
 		if payload.Magnet != "" {
 			data, err = addMagnet(ctx, payload.Magnet, nil)
 		} else if payload.Torrent != "" {
-			magnet, fileHeader, fetchErr := shared.FetchTorrentFile(payload.Torrent, "", log)
+			magnet, fileHeader, fetchErr := shared.FetchTorrentFile(payload.Torrent, &shared.FetchTorrentFileOptions{
+				SkipCache: true,
+				Log:       log,
+			})
 			if fetchErr != nil {
 				shared.ErrorBadRequest(r, "unable to fetch torrent file").WithCause(fetchErr).Send(w, r)
 				return
@@ -403,6 +425,9 @@ func handleStoreLinkGenerate(w http.ResponseWriter, r *http.Request) {
 
 	ctx := storecontext.Get(r)
 	link, err := shared.GenerateStremThruLink(r, ctx, payload.Link, "")
+	if err == nil && link != nil {
+		go torz.TryQueueMediaInfoProbe(ctx, payload.Link, link)
+	}
 	SendResponse(w, r, 200, link, err)
 }
 
@@ -433,10 +458,13 @@ func AddStoreEndpoints(mux *http.ServeMux) {
 	withStore := server.Middleware(StoreContext, RequireStore)
 
 	mux.HandleFunc("/v0/store/user", withStore(handleStoreUser))
-	mux.HandleFunc("/v0/store/magnets", withStore(handleStoreMagnets))
-	mux.HandleFunc("/v0/store/magnets/check", withStore(handleStoreMagnetsCheck))
-	mux.HandleFunc("/v0/store/magnets/{magnetId}", withStore(handleStoreMagnet))
-	mux.HandleFunc("/v0/store/link/generate", withStore(handleStoreLinkGenerate))
+
+	if config.Feature.HasTorz() {
+		mux.HandleFunc("/v0/store/magnets", withStore(handleStoreMagnets))
+		mux.HandleFunc("/v0/store/magnets/check", withStore(handleStoreMagnetsCheck))
+		mux.HandleFunc("/v0/store/magnets/{magnetId}", withStore(handleStoreMagnet))
+		mux.HandleFunc("/v0/store/link/generate", withStore(handleStoreLinkGenerate))
+	}
 
 	mux.HandleFunc("/v0/store/_/static/{video}", withCors(handleStatic))
 }

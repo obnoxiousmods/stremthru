@@ -8,6 +8,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -58,6 +59,12 @@ func (f *TorrentFile) ToFileHeader() (*multipart.FileHeader, error) {
 	return files[0], nil
 }
 
+var torrentFileCacheKey = cache.NewCache[string](&cache.CacheConfig{
+	Name:     "torz_torrent_cache_key",
+	Lifetime: config.Torz.TorrentFileCacheTTL,
+	MaxSize:  4096,
+})
+
 var torrentFileCache = cache.NewCache[TorrentFile](&cache.CacheConfig{
 	Name:       "torz_torrent",
 	Lifetime:   config.Torz.TorrentFileCacheTTL,
@@ -71,6 +78,17 @@ var torrentFetchErrCache = cache.NewCache[string](&cache.CacheConfig{
 })
 
 func cleanTorrentFileLink(link string) string {
+	if u, err := url.Parse(link); err == nil {
+		if strings.Contains(u.Path, "/dl/") {
+			q := u.Query()
+			if q.Has("jackett_apikey") && q.Has("file") {
+				q.Del("jackett_apikey")
+				q.Del("path") // random value everytime
+				u.RawQuery = q.Encode()
+				return u.String()
+			}
+		}
+	}
 	link, _, ok := strings.Cut(link, "?")
 	if !ok {
 		link, _, _ = strings.Cut(link, "&")
@@ -100,17 +118,62 @@ var torrentFileFetcher = func() *http.Client {
 	return client
 }()
 
-func FetchTorrentFile(link string, name string, log *logger.Logger) (string, *multipart.FileHeader, error) {
+type FetchTorrentFileOptions struct {
+	Name      string
+	SkipCache bool
+	CacheKeys []string
+	Log       *logger.Logger
+}
+
+func getTorrentCachedValue[T any](cache cache.Cache[T], keys []string) (value T, found bool) {
+	for _, key := range keys {
+		if cache.Get(key, &value) {
+			return value, true
+		}
+		var mainKey string
+		if torrentFileCacheKey.Get(key, &mainKey) {
+			if cache.Get(mainKey, &value) {
+				return value, true
+			}
+		}
+	}
+	return value, false
+}
+
+func setTorrentCacheValue[T any](cache cache.Cache[T], keys []string, value T) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	mainKey := keys[0]
+	if err := cache.Add(mainKey, value); err != nil {
+		return err
+	}
+	errs := []error{}
+	for _, key := range keys[1:] {
+		errs = append(errs, torrentFileCacheKey.Add(key, mainKey))
+	}
+	return errors.Join(errs...)
+}
+
+func FetchTorrentFile(link string, opts *FetchTorrentFileOptions) (string, *multipart.FileHeader, error) {
+	if opts == nil {
+		opts = &FetchTorrentFileOptions{}
+	}
+
+	log := opts.Log
+
 	clink := cleanTorrentFileLink(link)
 
 	linkHash := hashTorrentFileLink(link)
-	var cacheKey string
-	if !config.IsPublicInstance {
-		cacheKey = linkHash
+	var cacheKeys []string
+	if !config.IsPublicInstance && !opts.SkipCache {
+		cacheKeys = opts.CacheKeys
+		if len(cacheKeys) == 0 {
+			cacheKeys = []string{linkHash}
+		}
 	}
 
-	var torrentFile TorrentFile
-	if cacheKey != "" && torrentFileCache.Get(cacheKey, &torrentFile) {
+	if torrentFile, found := getTorrentCachedValue(torrentFileCache, cacheKeys); found {
 		if log != nil {
 			log.Debug("fetch torrent - cache hit", "link", clink)
 		}
@@ -118,25 +181,30 @@ func FetchTorrentFile(link string, name string, log *logger.Logger) (string, *mu
 		return "", fh, err
 	}
 
-	if fetchErr := ""; torrentFetchErrCache.Get(linkHash, &fetchErr) {
+	if fetchErr, found := getTorrentCachedValue(torrentFetchErrCache, cacheKeys); found {
 		if log != nil {
 			log.Debug("fetch torrent - cached failure", "link", clink)
 		}
 		return "", nil, fmt.Errorf("cached failure: %s", fetchErr)
 	}
 
-	maxSize := config.Torz.TorrentFileMaxSize
-
 	if log != nil {
 		log.Debug("fetch torrent - cache miss", "link", clink)
 	}
-	result, err, _ := torrentFileFetchSG.Do(linkHash, func() (ret any, err error) {
+
+	singleflightKey := linkHash
+	if len(cacheKeys) > 0 {
+		singleflightKey = cacheKeys[0]
+	}
+	result, err, _ := torrentFileFetchSG.Do(singleflightKey, func() (ret any, err error) {
 		defer func() {
 			if err == nil {
 				return
 			}
-			if err := torrentFetchErrCache.Add(linkHash, err.Error()); err != nil && log != nil {
-				log.Warn("fetch torrent - failed to cache failure", "error", err, "link", clink)
+			if err := setTorrentCacheValue(torrentFetchErrCache, cacheKeys, err.Error()); err != nil {
+				if log != nil {
+					log.Warn("fetch torrent - failed to cache failure", "error", err, "link", clink)
+				}
 			}
 		}()
 
@@ -152,6 +220,8 @@ func FetchTorrentFile(link string, name string, log *logger.Logger) (string, *mu
 				return location, nil
 			}
 		}
+
+		maxSize := config.Torz.TorrentFileMaxSize
 
 		if res.ContentLength > maxSize {
 			return nil, fmt.Errorf("file too large: %d bytes (max %d)", res.ContentLength, maxSize)
@@ -177,20 +247,20 @@ func FetchTorrentFile(link string, name string, log *logger.Logger) (string, *mu
 			log.Debug("fetch torrent - completed", "link", clink)
 		}
 
-		if name == "" {
-			name = "unknown.torrent"
-		}
-		filename := name
+		filename := opts.Name
 		if cd := res.Header.Get("Content-Disposition"); cd != "" {
 			_, params, _ := mime.ParseMediaType(cd)
 			if fn := params["filename"]; fn != "" {
 				filename = fn
 			}
 		}
-		if filename == name {
+		if filename == opts.Name {
 			if fn := path.Base(link); strings.HasSuffix(fn, ".torrent") {
 				filename = fn
 			}
+		}
+		if filename == "" {
+			filename = "unknown.torrent"
 		}
 		if !strings.HasSuffix(filename, ".torrent") {
 			filename += ".torrent"
@@ -202,11 +272,9 @@ func FetchTorrentFile(link string, name string, log *logger.Logger) (string, *mu
 			Link: link,
 			Mod:  time.Now(),
 		}
-		if cacheKey != "" {
-			if err := torrentFileCache.Add(cacheKey, file); err != nil {
-				if log != nil {
-					log.Warn("fetch torrent - failed to cache", "error", err, "link", clink)
-				}
+		if err := setTorrentCacheValue(torrentFileCache, cacheKeys, file); err != nil {
+			if log != nil {
+				log.Warn("fetch torrent - failed to cache", "error", err, "link", clink)
 			}
 		}
 		return file, nil

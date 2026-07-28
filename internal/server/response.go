@@ -35,6 +35,8 @@ func SendError(w http.ResponseWriter, r *http.Request, err error) {
 	var e *APIError
 	if sterr, ok := err.(StremThruError); ok {
 		sterr.Pack(r)
+		sterr.PrepareResponse(w)
+
 		err := sterr.GetError()
 		e = &APIError{
 			Cause:      err.Cause,

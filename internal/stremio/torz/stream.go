@@ -581,21 +581,6 @@ func GetStreamsForHashes(stremType, stremId string, hashes []string, nsid *torre
 			}
 		}
 
-		fName := ""
-		fIdx := -1
-		fSize := int64(0)
-		fVideoHash := ""
-		if file != nil {
-			fIdx = file.Idx
-			fName = file.Name
-			if file.Size > 0 {
-				fSize = file.Size
-			}
-			fVideoHash = file.VideoHash
-		} else if core.HasVideoExtension(tInfo.TorrentTitle) {
-			fName = tInfo.TorrentTitle
-		}
-
 		pttr, err := tInfo.ToParsedResult()
 		if err != nil {
 			return nil, err
@@ -616,20 +601,33 @@ func GetStreamsForHashes(stremType, stremId string, hashes []string, nsid *torre
 			Kind:     stremio_transformer.StreamExtractorResultKindTorz,
 			Category: stremType,
 			File: stremio_transformer.StreamExtractorResultFile{
-				Name: fName,
-				Idx:  fIdx,
+				Idx: -1,
 			},
 		}
-		if fSize > 0 {
-			data.File.Size = util.ToSize(fSize)
+
+		fSize := int64(0)
+		fVideoHash := ""
+		if file != nil {
+			data.File.Idx = file.Idx
+			data.File.Name = file.Name
+			if file.Size > 0 {
+				fSize = file.Size
+				data.File.Size = util.ToSize(fSize)
+			}
+			fVideoHash = file.VideoHash
+
+			stremio_transformer.ApplyMediaInfo(data, file.MediaInfo)
+		} else if core.HasVideoExtension(tInfo.TorrentTitle) {
+			data.File.Name = tInfo.TorrentTitle
 		}
+
 		wrappedStreams = append(wrappedStreams, WrappedStream{
 			R: data,
 			Stream: &stremio.Stream{
 				Name:        data.Addon.Name,
 				Description: data.TTitle,
 				InfoHash:    data.Hash,
-				FileIndex:   fIdx,
+				FileIndex:   data.File.Idx,
 				BehaviorHints: &stremio.StreamBehaviorHints{
 					Filename:   data.File.Name,
 					VideoSize:  fSize,
@@ -680,6 +678,13 @@ func handleStream(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		shared.ErrorBadRequest(r, "unsupported id: "+id).Send(w, r)
+		return
+	}
+
+	filter, filter_err := ud.GetFilter()
+	if filter_err != nil {
+		log.Warn("failed to parse filter expression", "error", filter_err)
+		shared.ErrorBadRequest(r, "invalid filter expression: "+filter_err.Error()).Send(w, r)
 		return
 	}
 
@@ -801,14 +806,7 @@ func handleStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if ud.Filter != "" {
-		filter, err := stremio_transformer.StreamFilterBlob(ud.Filter).Parse()
-		if err == nil {
-			wrappedStreams = filterStreams(wrappedStreams, filter)
-		} else {
-			log.Warn("failed to parse filter expression", "error", err)
-		}
-	}
+	wrappedStreams = filterStreams(wrappedStreams, filter)
 
 	stremio_transformer.SortStreams(wrappedStreams, ud.Sort)
 
@@ -911,6 +909,9 @@ func handleStream(w http.ResponseWriter, r *http.Request) {
 }
 
 func filterStreams(streams []WrappedStream, filter *stremio_transformer.StreamFilter) []WrappedStream {
+	if filter == nil || filter.IsEmpty() {
+		return streams
+	}
 	result := make([]WrappedStream, 0, len(streams))
 	for i := range streams {
 		stream := &streams[i]

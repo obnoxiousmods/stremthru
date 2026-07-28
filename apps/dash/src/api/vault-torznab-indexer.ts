@@ -7,7 +7,9 @@ export type TorznabIndexer = {
   disabled: boolean;
   id: number;
   name: string;
+  only_anime: boolean;
   rate_limit_config_id: null | string;
+  search_mode: TorznabIndexerSearchMode;
   type: TorznabIndexerType;
   updated_at: string;
   url: string;
@@ -16,17 +18,22 @@ export type TorznabIndexer = {
 type CreateTorznabIndexerParams = {
   api_key: string;
   name: string;
+  only_anime?: boolean;
   rate_limit_config_id: null | string;
+  search_mode?: TorznabIndexerSearchMode;
   type?: TorznabIndexerType;
   url: string;
 };
 
-type TorznabIndexerType = "jackett";
+type TorznabIndexerSearchMode = "auto" | "query";
+type TorznabIndexerType = "generic" | "jackett";
 
 type UpdateTorznabIndexerParams = {
   api_key?: string;
   name?: string;
+  only_anime?: boolean;
   rate_limit_config_id: null | string;
+  search_mode?: TorznabIndexerSearchMode;
 };
 
 export function useTorznabIndexerMutation() {

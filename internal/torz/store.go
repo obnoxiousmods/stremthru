@@ -1,6 +1,7 @@
 package torz
 
 import (
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"strconv"
@@ -14,8 +15,12 @@ import (
 	"github.com/MunifTanjim/stremthru/internal/shared"
 	storecontext "github.com/MunifTanjim/stremthru/internal/store/context"
 	store_util "github.com/MunifTanjim/stremthru/internal/store/util"
+	"github.com/MunifTanjim/stremthru/internal/torrent_info"
+	"github.com/MunifTanjim/stremthru/internal/torrent_stream"
 	"github.com/MunifTanjim/stremthru/internal/util"
 	"github.com/MunifTanjim/stremthru/store"
+	"github.com/MunifTanjim/stremthru/store/realdebrid"
+	"github.com/MunifTanjim/stremthru/store/torbox"
 )
 
 func handleStoreTorzCheck(w http.ResponseWriter, r *http.Request) {
@@ -52,7 +57,18 @@ func handleStoreTorzCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log := rCtx.Log
+
 	sid := queryParams.Get("sid")
+
+	basicInfoByHashCh := make(chan map[string]torrent_info.BasicInfo, 1)
+	go func() {
+		data, err := torrent_info.GetBasicInfoByHash(hashes)
+		if err != nil {
+			log.Error("failed to get basic info by hashes", "error", err)
+		}
+		basicInfoByHashCh <- data
+	}()
 
 	params := &store.CheckMagnetParams{
 		ClientIP:  ctx.ClientIP,
@@ -70,7 +86,30 @@ func handleStoreTorzCheck(w http.ResponseWriter, r *http.Request) {
 	if data.Items == nil {
 		data.Items = []store.CheckMagnetDataItem{}
 	}
+	basicInfoByHash := <-basicInfoByHashCh
+	for i := range data.Items {
+		if info, ok := basicInfoByHash[data.Items[i].Hash]; ok {
+			data.Items[i].Name = info.TorrentTitle
+		}
+	}
 	server.SendData(w, r, 200, data)
+}
+
+func TrackAddMagnet(ctx *storecontext.Context, link string, data *store.AddMagnetData, err error) {
+	if data != nil {
+		buddy.TrackMagnet(ctx.Store, data.Hash, data.Name, data.Size, data.Private, data.Files, "", data.Status != store.MagnetStatusDownloaded, ctx.StoreAuthToken)
+		return
+	}
+	if err == nil || link == "" {
+		return
+	}
+	if m, _ := core.ParseMagnetLink(link); m.Hash != "" {
+		if uerr, ok := errors.AsType[*core.UpstreamError](err); ok {
+			if uerr.Code == server.ErrorCodeUnavailableForLegalReasons {
+				buddy.TrackMagnet(ctx.Store, m.Hash, "", 0, false, nil, "", true, ctx.StoreAuthToken)
+			}
+		}
+	}
 }
 
 type AddTorzPayload struct {
@@ -90,11 +129,8 @@ func addTorz(r *http.Request, ctx *storecontext.Context, link string, file *mult
 		}
 	}
 	data, err := ctx.Store.AddMagnet(params)
-	if err != nil {
-		return nil, err
-	}
-	buddy.TrackMagnet(ctx.Store, data.Hash, data.Name, data.Size, data.Private, data.Files, "", data.Status != store.MagnetStatusDownloaded, ctx.StoreAuthToken)
-	return data, nil
+	TrackAddMagnet(ctx, link, data, err)
+	return data, err
 }
 
 func handleStoreTorzAdd(w http.ResponseWriter, r *http.Request) {
@@ -123,17 +159,21 @@ func handleStoreTorzAdd(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if strings.HasPrefix(payload.Link, "magnet:") || !strings.Contains(payload.Link, ":") {
-			m, err := core.ParseMagnetLink(payload.Link)
-			if err != nil || m.Hash == "" {
+			m, merr := core.ParseMagnetLink(payload.Link)
+			if merr != nil || m.Hash == "" {
 				server.ErrorBadRequest(r).Append(server.Error{
 					LocationType: server.LocationTypeBody,
 					Location:     "link",
 					Message:      "invalid link",
 				}).Send(w, r)
+				return
 			}
 			data, err = addTorz(r, ctx, m.RawLink, nil)
 		} else {
-			magnet, fileHeader, fetchErr := shared.FetchTorrentFile(payload.Link, "", log)
+			magnet, fileHeader, fetchErr := shared.FetchTorrentFile(payload.Link, &shared.FetchTorrentFileOptions{
+				SkipCache: true,
+				Log:       log,
+			})
 			if fetchErr != nil {
 				server.ErrorBadRequest(r).Append(server.Error{
 					LocationType: server.LocationTypeBody,
@@ -311,5 +351,46 @@ func handleStoreTorzLinkGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	go TryQueueMediaInfoProbe(ctx, payload.Link, data)
+
 	server.SendData(w, r, 200, data)
+}
+
+func TryQueueMediaInfoProbe(ctx *storecontext.Context, lockedLink string, linkData *store.GenerateLinkData) {
+	switch ctx.Store.GetName() {
+	case store.StoreNameTorBox:
+		id, fileId, err := torbox.LockedFileLink(lockedLink).Parse()
+		if err != nil {
+			return
+		}
+		params := &store.GetMagnetParams{Id: strconv.Itoa(id)}
+		params.APIKey = ctx.StoreAuthToken
+		magnet, err := ctx.Store.GetMagnet(params)
+		if err != nil {
+			return
+		}
+		for _, f := range magnet.Files {
+			if f.Link == lockedLink || f.Idx == fileId {
+				torrent_stream.QueueMediaInfoProbe(magnet.Hash, f.Path, linkData.Link)
+				return
+			}
+		}
+	case store.StoreNameRealDebrid:
+		torrentId, _, err := realdebrid.LockedFileLink(lockedLink).Parse()
+		if err != nil {
+			return
+		}
+		params := &store.GetMagnetParams{Id: torrentId}
+		params.APIKey = ctx.StoreAuthToken
+		magnet, err := ctx.Store.GetMagnet(params)
+		if err != nil {
+			return
+		}
+		for _, f := range magnet.Files {
+			if f.Link == lockedLink {
+				torrent_stream.QueueStoreMediaInfoProbe(magnet.Hash, f.Path, string(store.StoreCodeRealDebrid), ctx.StoreAuthToken, linkData.LinkId)
+				return
+			}
+		}
+	}
 }

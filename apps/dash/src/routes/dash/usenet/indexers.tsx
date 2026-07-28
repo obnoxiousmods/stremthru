@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ColumnDef, createColumnHelper } from "@tanstack/react-table";
 import {
   CheckCircle,
+  CopyIcon,
   Pencil,
   Plus,
   Power,
@@ -13,6 +14,7 @@ import { DateTime } from "luxon";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { useConfig } from "@/api/config";
 import {
   useRateLimitConfig,
   useRateLimitConfigs,
@@ -58,6 +60,7 @@ import { APIError } from "@/lib/api";
 declare module "@/components/data-table" {
   export interface DataTableMetaCtx {
     NewznabIndexer: {
+      baseUrl: string;
       onEdit: (item: NewznabIndexer) => void;
       removeIndexer: ReturnType<typeof useNewznabIndexerMutation>["remove"];
       testIndexer: ReturnType<typeof useNewznabIndexerMutation>["test"];
@@ -88,6 +91,34 @@ const columns: ColumnDef<NewznabIndexer>[] = [
     },
     header: "URL",
   }),
+  col.accessor("hostnames", {
+    cell: ({ getValue }) => {
+      const hostnames = getValue();
+      if (!hostnames?.length) return "-";
+      const [first, ...rest] = hostnames;
+      if (!rest.length) {
+        return <span className="font-mono text-xs">{first}</span>;
+      }
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="font-mono text-xs">
+              {first}{" "}
+              <span className="text-muted-foreground">+{rest.length}</span>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            <div className="flex flex-col gap-0.5 font-mono text-xs">
+              {hostnames.map((h) => (
+                <span key={h}>{h}</span>
+              ))}
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      );
+    },
+    header: "Hostnames",
+  }),
   col.accessor("rate_limit_config_id", {
     cell: ({ getValue }) => {
       return <RateLimitConfigName id={getValue()} />;
@@ -111,6 +142,18 @@ const columns: ColumnDef<NewznabIndexer>[] = [
     },
     header: "Status",
   }),
+  col.accessor("tunnel", {
+    cell: ({ getValue }) => {
+      const value = getValue();
+      if (!value) return "Auto";
+      if (value === "true") return "Forced";
+      if (value === "false") return "None";
+      return (
+        <span className="max-w-md truncate font-mono text-xs">{value}</span>
+      );
+    },
+    header: "Tunnel",
+  }),
   col.accessor("updated_at", {
     cell: ({ getValue }) => {
       const date = DateTime.fromISO(getValue());
@@ -120,7 +163,7 @@ const columns: ColumnDef<NewznabIndexer>[] = [
   }),
   col.display({
     cell: (c) => {
-      const { onEdit, removeIndexer, testIndexer, toggleIndexer } =
+      const { baseUrl, onEdit, removeIndexer, testIndexer, toggleIndexer } =
         c.table.options.meta!.ctx;
       const item = c.row.original;
       return (
@@ -186,6 +229,22 @@ const columns: ColumnDef<NewznabIndexer>[] = [
               </Button>
             </TooltipTrigger>
             <TooltipContent>Test Connection</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={async () => {
+                  const url = `${baseUrl}/v0/newznab/i/${item.id}/api`;
+                  await navigator.clipboard.writeText(url);
+                  toast.success("Copied endpoint URL");
+                }}
+                size="icon-sm"
+                variant="ghost"
+              >
+                <CopyIcon />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Copy Endpoint URL</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -275,6 +334,12 @@ function NewznabIndexerFormSheet({
     }
   }, [editItem]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      setEditItem(null);
+    }
+  }, [isOpen, setEditItem]);
+
   const { create, update } = useNewznabIndexerMutation();
 
   const defaultValues = useMemo(
@@ -282,20 +347,28 @@ function NewznabIndexerFormSheet({
       api_key: "",
       name: editItem?.name ?? "",
       rate_limit_config_id: editItem?.rate_limit_config_id ?? "",
+      tunnel: editItem?.tunnel ?? "",
       url: editItem?.url ?? "",
     }),
-    [editItem?.name, editItem?.rate_limit_config_id, editItem?.url],
+    [
+      editItem?.name,
+      editItem?.rate_limit_config_id,
+      editItem?.tunnel,
+      editItem?.url,
+    ],
   );
 
   const form = useAppForm({
     defaultValues,
     onSubmit: async ({ value }) => {
+      const tunnel = value.tunnel.trim() || null;
       if (editItem) {
         await update.mutateAsync({
           api_key: value.api_key,
           id: editItem.id,
           name: value.name,
           rate_limit_config_id: value.rate_limit_config_id || null,
+          tunnel,
         });
         toast.success("Updated successfully!");
       } else {
@@ -303,6 +376,7 @@ function NewznabIndexerFormSheet({
           api_key: value.api_key,
           name: value.name,
           rate_limit_config_id: value.rate_limit_config_id || null,
+          tunnel,
           url: value.url,
         });
         toast.success("Created successfully!");
@@ -319,8 +393,10 @@ function NewznabIndexerFormSheet({
     <Sheet onOpenChange={setIsOpen} open={isOpen}>
       <SheetTrigger asChild>
         <Button
-          onClick={() => {
+          onClick={(e) => {
+            e.preventDefault();
             setEditItem(null);
+            setIsOpen(true);
           }}
           size="sm"
         >
@@ -363,6 +439,14 @@ function NewznabIndexerFormSheet({
                   />
                 )}
               </form.AppField>
+              <form.AppField name="tunnel">
+                {(field) => (
+                  <field.Input
+                    label="Tunnel"
+                    placeholder="true | false | http(s)://... | socks5(h)://..."
+                  />
+                )}
+              </form.AppField>
             </div>
           </ScrollArea>
 
@@ -385,6 +469,7 @@ export const Route = createFileRoute("/dash/usenet/indexers")({
 });
 
 function RouteComponent() {
+  const config = useConfig();
   const newznabIndexers = useNewznabIndexers();
   const {
     remove: removeIndexer,
@@ -398,6 +483,8 @@ function RouteComponent() {
     setEditItem(item);
   };
 
+  const baseUrl = config.data?.instance.base_url ?? "";
+
   const table = useDataTable({
     columns,
     data: newznabIndexers.data ?? [],
@@ -406,6 +493,7 @@ function RouteComponent() {
     },
     meta: {
       ctx: {
+        baseUrl,
         onEdit: handleEdit,
         removeIndexer,
         testIndexer,
