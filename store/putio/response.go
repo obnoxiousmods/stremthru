@@ -128,17 +128,17 @@ func (c APIClient) GetAccountInfo(params *GetAccountInfoParams) (APIResponse[Acc
 // --- Transfers ---
 
 type TransferData struct {
-	Id                 int    `json:"id"`
-	Name               string `json:"name"`
-	Size               int64  `json:"size"`
-	Status             string `json:"status"`
-	Downloaded         int64  `json:"downloaded"`
-	PercentDone        int    `json:"percent_done"`
-	FileId             int    `json:"file_id"`
-	CurrentRatio       string `json:"current_ratio"`
-	CreatedAt          string `json:"created_at"`
-	StatusMessage      string `json:"status_message"`
-	IsPrivate          bool   `json:"is_private"`
+	Id            int    `json:"id"`
+	Name          string `json:"name"`
+	Size          int64  `json:"size"`
+	Status        string `json:"status"`
+	Downloaded    int64  `json:"downloaded"`
+	PercentDone   int    `json:"percent_done"`
+	FileId        int    `json:"file_id"`
+	CurrentRatio  string `json:"current_ratio"`
+	CreatedAt     string `json:"created_at"`
+	StatusMessage string `json:"status_message"`
+	IsPrivate     bool   `json:"is_private"`
 }
 
 type TransferResponse struct {
@@ -165,7 +165,7 @@ func (r TransferListResponse) IsSuccess() bool {
 
 type AddTransferParams struct {
 	Ctx
-	Url      string `json:"url"` // magnet link or torrent URL
+	Url string `json:"url"` // magnet link or torrent URL
 }
 
 func (c APIClient) AddTransfer(params *AddTransferParams) (APIResponse[TransferData], error) {
@@ -222,14 +222,14 @@ func (c APIClient) RemoveTransfer(params *RemoveTransferParams) (APIResponse[any
 // --- Files ---
 
 type FileData struct {
-	Id           int    `json:"id"`
-	Name         string `json:"name"`
-	Size         int64  `json:"size"`
-	ContentType  string `json:"content_type"`
-	IsMp4Avail   bool   `json:"is_mp4_available"`
-	ParentId     int    `json:"parent_id"`
-	IsDir        bool   `json:"is_dir"`
-	CreatedAt    string `json:"created_at"`
+	Id          int    `json:"id"`
+	Name        string `json:"name"`
+	Size        int64  `json:"size"`
+	ContentType string `json:"content_type"`
+	IsMp4Avail  bool   `json:"is_mp4_available"`
+	ParentId    int    `json:"parent_id"`
+	IsDir       bool   `json:"is_dir"`
+	CreatedAt   string `json:"created_at"`
 }
 
 type FileListData struct {

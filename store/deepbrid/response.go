@@ -129,11 +129,11 @@ func (c APIClient) GetUser(params *GetUserParams) (APIResponse[GetUserData], err
 // --- User Stats ---
 
 type GetUserStatsData struct {
-	Downloads       int    `json:"downloads"`
-	Bandwidth       string `json:"bandwidth"`
-	BandwidthBytes  int64  `json:"bandwidth_bytes"`
-	Torrents        int    `json:"torrents"`
-	Remote          int    `json:"remote"`
+	Downloads      int    `json:"downloads"`
+	Bandwidth      string `json:"bandwidth"`
+	BandwidthBytes int64  `json:"bandwidth_bytes"`
+	Torrents       int    `json:"torrents"`
+	Remote         int    `json:"remote"`
 }
 
 type GetUserStatsResponse struct {
