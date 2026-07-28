@@ -17,15 +17,21 @@ import (
 type TunnelType string
 
 const (
-	TUNNEL_TYPE_NONE   TunnelType = ""
-	TUNNEL_TYPE_AUTO   TunnelType = "a"
-	TUNNEL_TYPE_FORCED TunnelType = "f"
+	TUNNEL_TYPE_NONE          TunnelType = ""
+	TUNNEL_TYPE_AUTO          TunnelType = "a"
+	TUNNEL_TYPE_FORCED        TunnelType = "f"
+	TUNNEL_TYPE_NEWZ_NZB_GRAB TunnelType = "[newz_nzb_grab]"
 )
 
-type TunnelMap map[string]url.URL
+type TunnelMap struct {
+	sync.RWMutex
+	data map[string]url.URL
+}
 
-func (tm TunnelMap) hasProxy() bool {
-	for _, proxyUrl := range tm {
+func (tm *TunnelMap) HasProxy() bool {
+	tm.RLock()
+	defer tm.RUnlock()
+	for _, proxyUrl := range tm.data {
 		if proxyUrl.Host != "" {
 			return true
 		}
@@ -33,19 +39,27 @@ func (tm TunnelMap) hasProxy() bool {
 	return false
 }
 
-func (tm TunnelMap) GetDefaultProxyHost() string {
+func (tm *TunnelMap) GetDefaultProxyHost() string {
 	if proxy := tm.getProxy("*"); proxy != nil && proxy.Host != "" {
 		return proxy.Host
 	}
 	return ""
 }
 
-func (tm TunnelMap) getProxy(hostname string) *url.URL {
+func (tm *TunnelMap) setProxy(hostname string, proxy url.URL) {
+	tm.Lock()
+	tm.data[hostname] = proxy
+	tm.Unlock()
+}
+
+func (tm *TunnelMap) getProxy(hostname string) *url.URL {
+	tm.RLock()
 	hn := hostname
 	for {
-		if proxy, ok := tm[hn]; ok {
+		if proxy, ok := tm.data[hn]; ok {
+			tm.RUnlock()
 			if hn != hostname {
-				tm[hostname] = proxy
+				tm.setProxy(hostname, proxy)
 			}
 			return &proxy
 		}
@@ -55,12 +69,13 @@ func (tm TunnelMap) getProxy(hostname string) *url.URL {
 			break
 		}
 	}
+	tm.RUnlock()
 	return nil
 }
 
 // If tunnel is configured for `hostname` use that.
 // Otherwise fallback to environment proxy, i.e. `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`
-func (tm TunnelMap) autoProxy(r *http.Request) (*url.URL, error) {
+func (tm *TunnelMap) autoProxy(r *http.Request) (*url.URL, error) {
 	proxy := tm.getProxy(r.URL.Hostname())
 	if proxy == nil {
 		return http.ProxyFromEnvironment(r)
@@ -72,7 +87,7 @@ func (tm TunnelMap) autoProxy(r *http.Request) (*url.URL, error) {
 }
 
 // Use the default tunnel, ignore `NO_PROXY`
-func (tm TunnelMap) forcedProxy(r *http.Request) (*url.URL, error) {
+func (tm *TunnelMap) forcedProxy(r *http.Request) (*url.URL, error) {
 	if proxy := tm.getProxy(r.URL.Hostname()); proxy != nil && proxy.Host != "" {
 		return proxy, nil
 	}
@@ -82,7 +97,23 @@ func (tm TunnelMap) forcedProxy(r *http.Request) (*url.URL, error) {
 	return nil, nil
 }
 
-func (tm TunnelMap) GetProxy(tunnelType TunnelType) func(req *http.Request) (*url.URL, error) {
+func (tm *TunnelMap) newzNzbGrabProxy(r *http.Request) (*url.URL, error) {
+	if proxy := tm.getProxy(r.URL.Hostname()); proxy != nil {
+		if proxy.Host == "" {
+			return nil, nil
+		}
+		return proxy, nil
+	}
+	if proxy := tm.getProxy(string(TUNNEL_TYPE_NEWZ_NZB_GRAB)); proxy != nil {
+		if proxy.Host == "" {
+			return nil, nil
+		}
+		return proxy, nil
+	}
+	return nil, nil
+}
+
+func (tm *TunnelMap) GetProxy(tunnelType TunnelType) func(req *http.Request) (*url.URL, error) {
 	switch tunnelType {
 	case TUNNEL_TYPE_AUTO:
 		return tm.autoProxy
@@ -90,13 +121,15 @@ func (tm TunnelMap) GetProxy(tunnelType TunnelType) func(req *http.Request) (*ur
 		return tm.forcedProxy
 	case TUNNEL_TYPE_NONE:
 		return nil
+	case TUNNEL_TYPE_NEWZ_NZB_GRAB:
+		return tm.newzNzbGrabProxy
 	default:
 		panic("invalid tunnel type")
 	}
 }
 
-func parseTunnel(httpProxy, httpsProxy, tunnel string) TunnelMap {
-	tunnelMap := make(TunnelMap)
+func parseTunnel(httpProxy, httpsProxy, tunnel string) *TunnelMap {
+	tunnelData := make(map[string]url.URL)
 
 	defaultProxy := &url.URL{}
 
@@ -124,7 +157,7 @@ func parseTunnel(httpProxy, httpsProxy, tunnel string) TunnelMap {
 		}
 	}
 
-	tunnelMap["*"] = *defaultProxy
+	tunnelData["*"] = *defaultProxy
 
 	tunnelList := strings.FieldsFunc(tunnel, func(c rune) bool {
 		return c == ','
@@ -147,21 +180,21 @@ func parseTunnel(httpProxy, httpsProxy, tunnel string) TunnelMap {
 
 			switch proxy {
 			case "false":
-				tunnelMap[hostname] = url.URL{}
+				tunnelData[hostname] = url.URL{}
 			case "true":
-				tunnelMap[hostname] = *defaultProxy
+				tunnelData[hostname] = *defaultProxy
 			default:
 				if u, err := url.Parse(proxy); err == nil {
-					tunnelMap[hostname] = *u
+					tunnelData[hostname] = *u
 				}
 			}
 		}
 	}
 
-	return tunnelMap
+	return &TunnelMap{data: tunnelData}
 }
 
-var Tunnel = func() TunnelMap {
+var Tunnel = func() *TunnelMap {
 	httpProxy := getEnv("STREMTHRU_HTTP_PROXY")
 	// deprecated
 	httpsProxy := getEnv("STREMTHRU_HTTPS_PROXY")
@@ -179,18 +212,18 @@ type StoreTunnelConfig struct {
 
 type StoreTunnelConfigMap map[string]StoreTunnelConfig
 
-func (stc StoreTunnelConfigMap) isEnabledForAPI(name string) bool {
+func (stc StoreTunnelConfigMap) IsEnabledForAPI(name string) bool {
 	if c, ok := stc[name]; ok {
 		return c.api
 	}
 	if name != "*" {
-		return stc.isEnabledForAPI("*")
+		return stc.IsEnabledForAPI("*")
 	}
 	return true
 }
 
 func (stc StoreTunnelConfigMap) GetTypeForAPI(name string) TunnelType {
-	enabled := stc.isEnabledForAPI(name)
+	enabled := stc.IsEnabledForAPI(name)
 	if enabled {
 		return TUNNEL_TYPE_FORCED
 	}
@@ -215,18 +248,22 @@ func (stc StoreTunnelConfigMap) GetTypeForStream(name string) TunnelType {
 	return TUNNEL_TYPE_NONE
 }
 
-func parseStoreTunnel(storeTunnel string, tunnelMap TunnelMap) StoreTunnelConfigMap {
+func parseStoreTunnel(storeTunnel string, tunnelMap *TunnelMap) StoreTunnelConfigMap {
 	storeTunnelList := strings.FieldsFunc(storeTunnel, func(c rune) bool {
 		return c == ','
 	})
 
-	contentHostnameByStore := map[string]string{
-		"alldebrid":  "debrid.it",
-		"debridlink": "debrid.link",
-		"premiumize": "energycdn.com",
-		"realdebrid": "download.real-debrid.com",
-		"torbox":     "tb-cdn.st",
+	contentHostnameByStore := map[string][]string{
+		"alldebrid":  {"debrid.it"},
+		"deepbrid":   {"premium-dl.deepbrid.com", "www.deepbrid.com"},
+		"debridlink": {"debrid.link"},
+		"premiumize": {"energycdn.com"},
+		"putio":      {"api.put.io", "put.io", "cdn.put.io"},
+		"realdebrid": {"download.real-debrid.com"},
+		"torbox":     {"tb-cdn.cx", "tb-cdn.earth", "tb-cdn.io", "tb-cdn.pw", "tb-cdn.st"},
 	}
+
+	defaultProxy := tunnelMap.data["*"]
 
 	storeTunnelMap := make(StoreTunnelConfigMap)
 	for _, storeTunnel := range storeTunnelList {
@@ -238,21 +275,25 @@ func parseStoreTunnel(storeTunnel string, tunnelMap TunnelMap) StoreTunnelConfig
 
 			switch store {
 			case "*":
-				for _, hostname := range contentHostnameByStore {
-					if _, exists := tunnelMap[hostname]; !exists {
-						if tunnel == "true" {
-							tunnelMap[hostname] = *tunnelMap.getProxy("*")
-						} else {
-							tunnelMap[hostname] = url.URL{}
+				for _, hostnames := range contentHostnameByStore {
+					for _, hostname := range hostnames {
+						if _, exists := tunnelMap.data[hostname]; !exists {
+							if tunnel == "true" {
+								tunnelMap.data[hostname] = defaultProxy
+							} else {
+								tunnelMap.data[hostname] = url.URL{}
+							}
 						}
 					}
 				}
 			default:
-				if hostname, ok := contentHostnameByStore[store]; ok {
-					if tunnel == "true" {
-						tunnelMap[hostname] = *tunnelMap.getProxy("*")
-					} else {
-						tunnelMap[hostname] = url.URL{}
+				if hostnames, ok := contentHostnameByStore[store]; ok {
+					for _, hostname := range hostnames {
+						if tunnel == "true" {
+							tunnelMap.data[hostname] = defaultProxy
+						} else {
+							tunnelMap.data[hostname] = url.URL{}
+						}
 					}
 				}
 			}
@@ -291,7 +332,7 @@ func GetHTTPClient(tunnelType TunnelType) *http.Client {
 	}
 }
 
-func getHTTPClientWithProxy(proxyUrl *url.URL) *http.Client {
+func GetHTTPClientWithProxy(proxyUrl *url.URL) *http.Client {
 	transport := DefaultHTTPTransport.Clone()
 	transport.Proxy = func(r *http.Request) (*url.URL, error) {
 		return proxyUrl, nil
@@ -373,7 +414,7 @@ func (ipr *IPResolver) getIpFrom(client *http.Client, checker string) (string, e
 	return ip, nil
 }
 
-func (ipr *IPResolver) getIp(client *http.Client) (string, error) {
+func (ipr *IPResolver) GetIP(client *http.Client) (string, error) {
 	errs := []error{}
 	for _, checker := range ipr.checkers {
 		ip, err := ipr.getIpFrom(client, checker)
@@ -393,7 +434,7 @@ func (ipr *IPResolver) GetMachineIP() string {
 	if ipr.machineIP == "" {
 		client := GetHTTPClient(TUNNEL_TYPE_NONE)
 		client.Timeout = 30 * time.Second
-		ip, err := ipr.getIp(client)
+		ip, err := ipr.GetIP(client)
 		if err != nil {
 			log.Panicf("Failed to detect Machine IP: %v\n", err)
 		}
@@ -405,7 +446,7 @@ func (ipr *IPResolver) GetMachineIP() string {
 func (ipr *IPResolver) GetTunnelIP() (string, error) {
 	client := GetHTTPClient(TUNNEL_TYPE_FORCED)
 	client.Timeout = 30 * time.Second
-	ip, err := ipr.getIp(client)
+	ip, err := ipr.GetIP(client)
 	if err != nil {
 		return "", err
 	}
@@ -420,11 +461,18 @@ func (ipr *IPResolver) resolveTunnelIPMap() error {
 		return nil
 	}
 
+	Tunnel.RLock()
+	tunnelSnapshot := make(map[string]url.URL, len(Tunnel.data))
+	for k, v := range Tunnel.data {
+		tunnelSnapshot[k] = v
+	}
+	Tunnel.RUnlock()
+
 	proxyIpByProxyHost := map[string]string{}
 	proxyIpByHostname := map[string]string{}
 	errs := []error{}
 
-	for hostname, u := range Tunnel {
+	for hostname, u := range tunnelSnapshot {
 		if ip, ok := proxyIpByProxyHost[u.Host]; ok {
 			proxyIpByHostname[hostname] = ip
 			continue
@@ -433,9 +481,9 @@ func (ipr *IPResolver) resolveTunnelIPMap() error {
 		if u.Host == "" {
 			ip = ipr.GetMachineIP()
 		} else {
-			client := getHTTPClientWithProxy(&u)
+			client := GetHTTPClientWithProxy(&u)
 			client.Timeout = 30 * time.Second
-			if proxyIp, err := ipr.getIp(client); err == nil {
+			if proxyIp, err := ipr.GetIP(client); err == nil {
 				ip = proxyIp
 			} else {
 				errs = append(errs, err)
@@ -463,3 +511,24 @@ func (ipr *IPResolver) GetTunnelIPByHostname() (map[string]string, error) {
 	err := ipr.resolveTunnelIPMap()
 	return ipr.proxyIpByHostname, err
 }
+
+var IP = func() *IPResolver {
+	ip := &IPResolver{
+		checkers: strings.Split(getEnv("STREMTHRU_IP_CHECKER"), ","),
+	}
+	ip.validate()
+
+	if Tunnel.HasProxy() {
+		defaultProxyHost := Tunnel.GetDefaultProxyHost()
+		ipMap, err := ip.GetTunnelIPByProxyHost()
+		if err != nil {
+			if defaultProxyHost != "" && ipMap[defaultProxyHost] == "" {
+				log.Panicf("Failed to resolve Tunnel IP Map: %v\n", err)
+			} else {
+				log.Printf("Failed to resolve Tunnel IP Map: %v\n\n", err)
+			}
+		}
+	}
+
+	return ip
+}()
