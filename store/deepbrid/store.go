@@ -1,6 +1,7 @@
 package deepbrid
 
 import (
+	"errors"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -334,10 +335,12 @@ func (c *StoreClient) ListMagnets(params *store.ListMagnetsParams) (*store.ListM
 }
 
 func (c *StoreClient) RemoveMagnet(params *store.RemoveMagnetParams) (*store.RemoveMagnetData, error) {
-	// DeepBrid API doesn't have a delete torrent endpoint
-	return &store.RemoveMagnetData{
-		Id: params.Id,
-	}, nil
+	// DeepBrid exposes deletion only through its cookie-authenticated website,
+	// not the API. Returning success here made callers believe capacity had been
+	// recovered even though nothing changed.
+	upErr := UpstreamErrorWithCause(errors.New("DeepBrid API does not support torrent deletion"))
+	upErr.StatusCode = http.StatusNotImplemented
+	return nil, upErr
 }
 
 func (c *StoreClient) GenerateLink(params *store.GenerateLinkParams) (*store.GenerateLinkData, error) {
