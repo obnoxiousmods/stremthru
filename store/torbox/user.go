@@ -42,6 +42,11 @@ func (c APIClient) GetUser(params *GetUserParams) (APIResponse[GetUserData], err
 	form.Add("settings", strconv.FormatBool(params.Settings))
 	params.Form = form
 	response := &Response[GetUserData]{}
-	res, err := c.Request("GET", "/v1/api/user/me", params, response)
+	res, err := c.Request("GET", userPath, params, response)
+	// Every account read is a chance to arm or release the cooldown bar, so the
+	// state stays current without a dedicated poll while the account is healthy.
+	if err == nil {
+		c.noteAccountCooldown(params.GetAPIKey(c.apiKey), &response.Data)
+	}
 	return newAPIResponse(res, response.Data, response.Detail), err
 }

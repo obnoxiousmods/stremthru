@@ -72,6 +72,17 @@ func (c APIClient) Request(method, path string, params request.Context, v Respon
 	if params == nil {
 		params = &Ctx{}
 	}
+	// Refuse locally while TorBox has the account in cooldown. Sending anyway is
+	// what extends it, and the call cannot succeed regardless: the API answers
+	// but the CDN drops the bytes. The account endpoint stays exempt because
+	// reading it is the only way to learn the cooldown has lifted.
+	if path != userPath {
+		apiKey := params.GetAPIKey(c.apiKey)
+		c.ensureAccountChecked(apiKey)
+		if remaining := accountCooldownRemaining(apiKey); remaining > 0 {
+			return nil, errAccountCooldown(remaining)
+		}
+	}
 	req, err := params.NewRequest(c.BaseURL, method, path, c.reqHeader, c.reqQuery)
 	if err != nil {
 		error := core.NewStoreError("failed to create request")
