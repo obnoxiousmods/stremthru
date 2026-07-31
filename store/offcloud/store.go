@@ -195,7 +195,7 @@ func (s *StoreClient) CheckMagnet(params *store.CheckMagnetParams) (*store.Check
 				Idx:    -1,
 				Name:   f.Filename,
 				Path:   "/" + filepath.Join(filepath.Join(f.Folder...), f.Filename),
-				Size:   -1,
+				Size:   f.Size,
 				Source: source,
 			})
 		}

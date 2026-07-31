@@ -21,6 +21,10 @@ type GetCacheInfoDataItem struct {
 	Files  []struct {
 		Folder   []string `json:"folder"`
 		Filename string   `json:"filename"`
+		// Offcloud returns the size of every file in a cached torrent. Dropping
+		// it left callers unable to tell a feature from a sample inside a pack,
+		// which is exactly the choice a cache check exists to inform.
+		Size int64 `json:"size"`
 	} `json:"files,omitempty"`
 }
 
